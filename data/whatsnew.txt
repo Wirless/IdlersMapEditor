@@ -1,3 +1,28 @@
+Version 6.9.3
+Added house color and further tooltip expansions
+
+Version 6.9.2
+--Added custom brush 2x2 and others resizable brush
+
+Version 6.9.1
+Added notes support
+
+Version 6.9.0
+--Added Wallize and Wallize selection
+Added extended tooltips
+
+Version 6.8.9
+-- added dungeon generator
+
+Version 6.8.8
+-- Added Island generator
+
+Version 6.8.7
+-- Upgraded Map generation
+
+Version 6.8.6
+- Revscript right click loading support
+
 Version 6.8.5
 - Including OTMapGen very basic version .
 
