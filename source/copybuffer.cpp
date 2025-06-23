@@ -107,12 +107,58 @@ void CopyBuffer::copy(Editor& editor, int floor) {
 	g_gui.SetStatusText(wxstr(ss.str()));
 }
 
+
 void CopyBuffer::cut(Editor& editor, int floor) {
 	if (editor.selection.size() == 0) {
 		g_gui.SetStatusText("No tiles to cut.");
 		return;
 	}
 
+	// Check if any selected tiles have zones - if so, use copy+delete workflow
+	bool hasZones = false;
+	for (TileSet::iterator it = editor.selection.begin(); it != editor.selection.end(); ++it) {
+		Tile* tile = *it;
+		if (tile && tile->ground && tile->ground->isSelected()) {
+			if (!tile->getZoneIds().empty() || tile->getMapFlags() != 0) {
+				hasZones = true;
+				break;
+			}
+		}
+	}
+	
+	if (hasZones) {
+		// Use copy+delete workflow for zone tiles to avoid undo system crashes
+		size_t tileCount = editor.selection.size();
+		
+		// Copy tiles to buffer first
+		copy(editor, floor);
+		
+		if (!canPaste()) {
+			g_gui.SetStatusText("Failed to copy tiles with zones.");
+			return;
+		}
+		
+		// Clear zone flags from original map tiles before deletion
+		for (TileSet::iterator it = editor.selection.begin(); it != editor.selection.end(); ++it) {
+			Tile* tile = *it;
+			if (tile && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+				tile->unsetMapFlags(TILESTATE_ZONE_BRUSH);
+				tile->clearZoneId();
+			}
+		}
+		
+		// Delete the tiles
+		editor.destroySelection();
+		g_gui.RefreshView();
+		
+		// Show status message
+		std::stringstream ss;
+		ss << "Cut " << tileCount << " tile" << (tileCount > 1 ? "s" : "") << " with zones";
+		g_gui.SetStatusText(wxstr(ss.str()));
+		return;
+	}
+
+	// Normal cut operation for non-zone tiles
 	clear();
 	tiles = newd BaseMap();
 
@@ -120,8 +166,25 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	int item_count = 0;
 	copyPos = Position(0xFFFF, 0xFFFF, floor);
 
-	BatchAction* batch = editor.actionQueue->createBatch(ACTION_CUT_TILES);
-	Action* action = editor.actionQueue->createAction(batch);
+	BatchAction* batch = nullptr;
+	Action* action = nullptr;
+	
+	try {
+		batch = editor.actionQueue->createBatch(ACTION_CUT_TILES);
+		if (!batch) {
+			g_gui.SetStatusText("Failed to create batch action for cut operation.");
+			return;
+		}
+		
+		action = editor.actionQueue->createAction(batch);
+		if (!action) {
+			g_gui.SetStatusText("Failed to create action for cut operation.");
+			return;
+		}
+	} catch (...) {
+		g_gui.SetStatusText("Exception occurred while creating cut action.");
+		return;
+	}
 
 	PositionList tilestoborder;
 
@@ -129,8 +192,20 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 		tile_count++;
 
 		Tile* tile = *it;
+		if (!tile) {
+			continue; // Skip null tiles
+		}
+		
 		Tile* newtile = tile->deepCopy(editor.map);
-		Tile* copied_tile = tiles->allocator(tile->getLocation());
+		if (!newtile) {
+			continue; // Skip if deepCopy failed
+		}
+		
+		TileLocation* location = tiles->createTileL(tile->getPosition());
+		Tile* copied_tile = tiles->allocator(location);
+		if (!copied_tile) {
+			continue; // Skip if allocator failed
+		}
 
 		if (tile->ground && tile->ground->isSelected()) {
 			copied_tile->house_id = newtile->house_id;
@@ -158,7 +233,7 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 			newtile->spawn = nullptr;
 		}
 
-		tiles->setTile(copied_tile->getPosition(), copied_tile);
+		tiles->setTile(copied_tile);
 
 		if (copied_tile->getX() < copyPos.x) {
 			copyPos.x = copied_tile->getX();
@@ -187,30 +262,46 @@ void CopyBuffer::cut(Editor& editor, int floor) {
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 		action = editor.actionQueue->createAction(batch);
 		for (PositionList::iterator it = tilestoborder.begin(); it != tilestoborder.end(); ++it) {
-			TileLocation* location = editor.map.createTileL(*it);
-			if (location->get()) {
-				Tile* new_tile = location->get()->deepCopy(editor.map);
-				new_tile->borderize(&editor.map);
-				new_tile->wallize(&editor.map);
-				action->addChange(newd Change(new_tile));
-			} else {
-				Tile* new_tile = editor.map.allocator(location);
-				new_tile->borderize(&editor.map);
-				if (new_tile->size()) {
-					action->addChange(newd Change(new_tile));
-				} else {
-					delete new_tile;
+			try {
+				TileLocation* location = editor.map.createTileL(*it);
+				if (!location) {
+					continue;
 				}
+				
+				if (location->get()) {
+					Tile* new_tile = location->get()->deepCopy(editor.map);
+					if (new_tile) {
+						new_tile->borderize(&editor.map);
+						new_tile->wallize(&editor.map);
+						action->addChange(newd Change(new_tile));
+					}
+				} else {
+					Tile* new_tile = editor.map.allocator(location);
+					if (new_tile) {
+						new_tile->borderize(&editor.map);
+						if (new_tile->size()) {
+							action->addChange(newd Change(new_tile));
+						} else {
+							delete new_tile;
+						}
+					}
+				}
+			} catch (...) {
+				// Automagic borderize operation failed - continue with other tiles
 			}
 		}
 
 		batch->addAndCommitAction(action);
 	}
 
-	editor.addBatch(batch);
-	std::stringstream ss;
-	ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
-	g_gui.SetStatusText(wxstr(ss.str()));
+	try {
+		editor.addBatch(batch);
+		std::stringstream ss;
+		ss << "Cut out " << tile_count << " tile" << (tile_count > 1 ? "s" : "") << " (" << item_count << " item" << (item_count > 1 ? "s" : "") << ")";
+		g_gui.SetStatusText(wxstr(ss.str()));
+	} catch (...) {
+		g_gui.SetStatusText("Exception occurred while finalizing cut operation.");
+	}
 }
 
 void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
