@@ -41,11 +41,13 @@
 #include "main_menubar.h"
 #include "main_toolbar.h"
 #include "dark_mode_manager.h"
+#include "map_drawer.h"
 
 BEGIN_EVENT_TABLE(PreferencesWindow, wxDialog)
 EVT_BUTTON(wxID_OK, PreferencesWindow::OnClickOK)
 EVT_BUTTON(wxID_CANCEL, PreferencesWindow::OnClickCancel)
 EVT_BUTTON(wxID_APPLY, PreferencesWindow::OnClickApply)
+EVT_BUTTON(wxID_ANY, PreferencesWindow::OnForceReloadRevScripts)
 EVT_COLLAPSIBLEPANE_CHANGED(wxID_ANY, PreferencesWindow::OnCollapsiblePane)
 END_EVENT_TABLE()
 
@@ -63,6 +65,8 @@ PreferencesWindow::PreferencesWindow(wxWindow* parent, bool clientVersionSelecte
 	book->AddPage(CreateClientPage(), "Client Version", clientVersionSelected);
 	book->AddPage(CreateLODPage(), "LOD");
 	book->AddPage(CreateAutomagicPage(), "Automagic");
+	book->AddPage(CreateTooltipInfoPage(), "Tooltip Info");
+	book->AddPage(CreateInvisibleItemsPage(), "Invisible Items");
 
 	sizer->Add(book, 1, wxEXPAND | wxALL, 10);
 
@@ -115,6 +119,17 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	auto_select_raw_chkbox->SetToolTip("Automatically selects RAW brush when right-clicking items while showing the context menu.");
 	sizer->Add(auto_select_raw_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	show_map_warnings_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Show map loader warnings");
+	show_map_warnings_chkbox->SetValue(!g_settings.getBoolean(Config::SUPPRESS_MAP_WARNINGS));
+	show_map_warnings_chkbox->SetToolTip("Show warnings dialog when loading maps (can be disabled with 'Don't show again' checkbox in the warnings dialog).");
+	sizer->Add(show_map_warnings_chkbox, 0, wxLEFT | wxTOP, 5);
+
+	// Add suppress map warnings checkbox (redundant, for explicit control)
+	suppress_map_warnings_chkbox = newd wxCheckBox(general_page, wxID_ANY, "Never show map loader warnings");
+	suppress_map_warnings_chkbox->SetValue(g_settings.getBoolean(Config::SUPPRESS_MAP_WARNINGS));
+	suppress_map_warnings_chkbox->SetToolTip("If checked, map loader warnings will never be shown, even if there are errors or warnings during map load.");
+	sizer->Add(suppress_map_warnings_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	sizer->AddSpacer(10);
 
 	// Add autosave options
@@ -154,6 +169,19 @@ wxNotebookPage* PreferencesWindow::CreateGeneralPage() {
 	replace_size_spin = newd wxSpinCtrl(general_page, wxID_ANY, i2ws(g_settings.getInteger(Config::REPLACE_SIZE)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100000);
 	grid_sizer->Add(replace_size_spin, 0);
 	SetWindowToolTip(tmptext, replace_size_spin, "How many items you can replace on the map using the Replace Item tool.");
+
+	grid_sizer->Add(tmptext = newd wxStaticText(general_page, wxID_ANY, "OTS Data directory: "), 0);
+	revscript_directory_picker = newd wxDirPickerCtrl(general_page, wxID_ANY);
+	grid_sizer->Add(revscript_directory_picker, 1, wxEXPAND);
+	wxString revscript_dir = wxstr(g_settings.getString(Config::OTS_DATA_DIRECTORY));
+	revscript_directory_picker->SetPath(revscript_dir);
+	SetWindowToolTip(tmptext, revscript_directory_picker, "Directory containing OTS data files (/data/ folder with scripts, actions, movements, etc.).");
+
+	grid_sizer->Add(newd wxStaticText(general_page, wxID_ANY, ""), 0); // Empty cell for alignment
+	force_reload_revscripts_btn = newd wxButton(general_page, wxID_ANY, "Force Reload Scripts");
+	grid_sizer->Add(force_reload_revscripts_btn, 0);
+	SetWindowToolTip(force_reload_revscripts_btn, "Force reload all script files from the selected OTS data directory.");
+
 
 	sizer->Add(grid_sizer, 0, wxALL, 5);
 	sizer->AddSpacer(10);
@@ -199,6 +227,11 @@ wxNotebookPage* PreferencesWindow::CreateEditorPage() {
 	auto_assign_doors_chkbox->SetToolTip("This will auto-assign unique door ids to all doors placed with the door brush (or doors painted over with the house brush).\nDoes NOT affect doors placed using the RAW palette.");
 	sizer->Add(auto_assign_doors_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	auto_assign_depot_to_closest_temple_chkbox = newd wxCheckBox(editor_page, wxID_ANY, "Auto-assign depot to closest temple");
+	auto_assign_depot_to_closest_temple_chkbox->SetValue(g_settings.getBoolean(Config::AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE));
+	auto_assign_depot_to_closest_temple_chkbox->SetToolTip("Automatically assign depot town ID to the closest temple when placing depot items. This makes depot mapping more seamless by calculating the distance to all temples and setting the depot ID accordingly.");
+	sizer->Add(auto_assign_depot_to_closest_temple_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	doodad_erase_same_chkbox = newd wxCheckBox(editor_page, wxID_ANY, "Doodad brush only erases same");
 	doodad_erase_same_chkbox->SetValue(g_settings.getBoolean(Config::DOODAD_BRUSH_ERASE_LIKE));
 	doodad_erase_same_chkbox->SetToolTip("The doodad brush will only erase items that belongs to the current brush.");
@@ -230,6 +263,21 @@ wxNotebookPage* PreferencesWindow::CreateEditorPage() {
 	merge_paste_chkbox->SetValue(g_settings.getBoolean(Config::MERGE_PASTE));
 	merge_paste_chkbox->SetToolTip("Pasted tiles won't replace already placed tiles.");
 	sizer->Add(merge_paste_chkbox, 0, wxLEFT | wxTOP, 5);
+
+	sizer->AddSpacer(10);
+	
+	// Add refresh radius control
+	wxFlexGridSizer* refresh_sizer = newd wxFlexGridSizer(2, 10, 10);
+	refresh_sizer->AddGrowableCol(1);
+	
+	wxStaticText* refresh_radius_label = newd wxStaticText(editor_page, wxID_ANY, "Multiplayer refresh radius: ");
+	refresh_sizer->Add(refresh_radius_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	refresh_radius_spin = newd wxSpinCtrl(editor_page, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 5, 50, g_settings.getInteger(Config::REFRESH_RADIUS));
+	refresh_radius_spin->SetToolTip("The radius (in nodes) to refresh when using the 'Refresh Visible Area' feature in multiplayer mode.");
+	refresh_sizer->Add(refresh_radius_spin, 0);
+	
+	sizer->Add(refresh_sizer, 0, wxLEFT | wxTOP | wxEXPAND, 5);
 
 	editor_page->SetSizerAndFit(sizer);
 
@@ -404,6 +452,70 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage() {
 
 	sizer->Add(pane, 0);
 	*/
+
+	sizer->AddSpacer(15);
+
+	// Client Box Size Settings
+	sizer->Add(newd wxStaticText(graphics_page, wxID_ANY, "Client Box Customization:"), 0, wxLEFT | wxTOP, 5);
+	
+	ingame_box_custom_size_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Enable custom client box size");
+	ingame_box_custom_size_chkbox->SetValue(g_settings.getBoolean(Config::INGAME_BOX_CUSTOM_SIZE_ENABLED));
+	ingame_box_custom_size_chkbox->SetToolTip("When enabled, use custom size and offsets for the client box instead of the default 17x13 area.");
+	sizer->Add(ingame_box_custom_size_chkbox, 0, wxLEFT | wxTOP, 5);
+
+	// Grid for client box controls
+	auto* client_box_grid_sizer = newd wxFlexGridSizer(2, 10, 10);
+	client_box_grid_sizer->AddGrowableCol(1);
+
+	// Box Width
+	wxStaticText* box_width_label = newd wxStaticText(graphics_page, wxID_ANY, "Client box width:");
+	client_box_grid_sizer->Add(box_width_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	ingame_box_width_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, 
+		i2ws(g_settings.getInteger(Config::INGAME_BOX_WIDTH)), 
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 5, 50);
+	ingame_box_width_spin->SetToolTip("Width of the client box in tiles (default: 17)");
+	client_box_grid_sizer->Add(ingame_box_width_spin, 0);
+
+	// Box Height
+	wxStaticText* box_height_label = newd wxStaticText(graphics_page, wxID_ANY, "Client box height:");
+	client_box_grid_sizer->Add(box_height_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	ingame_box_height_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, 
+		i2ws(g_settings.getInteger(Config::INGAME_BOX_HEIGHT)), 
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 5, 50);
+	ingame_box_height_spin->SetToolTip("Height of the client box in tiles (default: 13)");
+	client_box_grid_sizer->Add(ingame_box_height_spin, 0);
+
+	// Offset X
+	wxStaticText* offset_x_label = newd wxStaticText(graphics_page, wxID_ANY, "X border offset:");
+	client_box_grid_sizer->Add(offset_x_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	ingame_box_offset_x_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, 
+		i2ws(g_settings.getInteger(Config::INGAME_BOX_OFFSET_X)), 
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10, 10);
+	ingame_box_offset_x_spin->SetToolTip("Horizontal offset for the client box position");
+	client_box_grid_sizer->Add(ingame_box_offset_x_spin, 0);
+
+	// Offset Y
+	wxStaticText* offset_y_label = newd wxStaticText(graphics_page, wxID_ANY, "Y border offset:");
+	client_box_grid_sizer->Add(offset_y_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	ingame_box_offset_y_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, 
+		i2ws(g_settings.getInteger(Config::INGAME_BOX_OFFSET_Y)), 
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10, 10);
+	ingame_box_offset_y_spin->SetToolTip("Vertical offset for the client box position (default: 2)");
+	client_box_grid_sizer->Add(ingame_box_offset_y_spin, 0);
+
+	sizer->Add(client_box_grid_sizer, 0, wxEXPAND | wxALL, 6);
+
+	// Connect events to update UI state
+	ingame_box_custom_size_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+		UpdateClientBoxUI();
+	});
+	
+	// Initial update of UI state
+	UpdateClientBoxUI();
 
 	graphics_page->SetSizerAndFit(sizer);
 
@@ -590,6 +702,12 @@ wxNotebookPage* PreferencesWindow::CreateClientPage() {
 	check_sigs_chkbox->SetValue(g_settings.getBoolean(Config::CHECK_SIGNATURES));
 	check_sigs_chkbox->SetToolTip("When this option is not checked, the editor will load any OTB/DAT/SPR combination without complaints. This may cause graphics bugs.");
 	options_sizer->Add(check_sigs_chkbox, 0, wxLEFT | wxRIGHT | wxTOP, 5);
+
+	// Force client items.otb checkbox
+	force_client_otb_chkbox = newd wxCheckBox(client_page, wxID_ANY, "Force load items.otb from client folder");
+	force_client_otb_chkbox->SetValue(g_settings.getBoolean(Config::FORCE_CLIENT_ITEMS_OTB));
+	force_client_otb_chkbox->SetToolTip("When enabled, items.otb and items.xml will be loaded from the same folder as the client files instead of the data directory.");
+	options_sizer->Add(force_client_otb_chkbox, 0, wxLEFT | wxRIGHT | wxTOP, 5);
 
 	// Add the grid sizer
 	topsizer->Add(options_sizer, wxSizerFlags(0).Expand());
@@ -889,6 +1007,80 @@ wxNotebookPage* PreferencesWindow::CreateAutomagicPage() {
 	return automagic_page;
 }
 
+wxNotebookPage* PreferencesWindow::CreateTooltipInfoPage() {
+	wxNotebookPage* tooltip_page = newd wxPanel(book, wxID_ANY);
+	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+
+	// Master enable checkbox
+	tooltip_enable_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Enable tooltips");
+	tooltip_enable_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW));
+	tooltip_enable_chkbox->SetToolTip("Enable or disable all tooltips in the map editor.");
+	sizer->Add(tooltip_enable_chkbox, 0, wxALL, 5);
+
+	// Show hasScript checkbox
+	tooltip_show_hasscript_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show 'hasScript' in tooltips");
+	tooltip_show_hasscript_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_HASSCRIPT));
+	tooltip_show_hasscript_chkbox->SetToolTip("Show the 'hasScript' property in tooltips (if present).");
+	sizer->Add(tooltip_show_hasscript_chkbox, 0, wxALL, 5);
+
+	// Show text checkbox
+	tooltip_show_text_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show text in tooltips");
+	tooltip_show_text_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_TEXT));
+	tooltip_show_text_chkbox->SetToolTip("Show item text in tooltips (if present).");
+	sizer->Add(tooltip_show_text_chkbox, 0, wxALL, 5);
+
+	// Show item ID checkbox
+	tooltip_show_itemid_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show item ID in tooltips");
+	tooltip_show_itemid_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_ITEMID));
+	tooltip_show_itemid_chkbox->SetToolTip("Show the item ID in tooltips (id: ####).");
+	sizer->Add(tooltip_show_itemid_chkbox, 0, wxALL, 5);
+
+	// Ignore IDs input
+	sizer->Add(newd wxStaticText(tooltip_page, wxID_ANY, "Ignore Item IDs/Ranges:"), 0, wxLEFT | wxTOP, 5);
+	tooltip_ignore_ids_textctrl = newd wxTextCtrl(tooltip_page, wxID_ANY, wxstr(g_settings.getString(Config::TOOLTIP_IGNORE_IDS)), wxDefaultPosition, wxSize(300, -1), 0);
+	tooltip_ignore_ids_textctrl->SetToolTip("Enter item IDs or ranges to ignore in tooltips, separated by commas. Example: 658-660,6891,136,3159,333-444");
+	sizer->Add(tooltip_ignore_ids_textctrl, 0, wxALL | wxEXPAND, 5);
+
+	// Show action ID checkbox
+	tooltip_show_aid_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show action ID (aid) in tooltips");
+	tooltip_show_aid_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_AID));
+	tooltip_show_aid_chkbox->SetToolTip("Show the action ID (aid: ####) in tooltips.");
+	sizer->Add(tooltip_show_aid_chkbox, 0, wxALL, 5);
+
+	// Show unique ID checkbox
+	tooltip_show_uid_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show unique ID (uid) in tooltips");
+	tooltip_show_uid_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_UID));
+	tooltip_show_uid_chkbox->SetToolTip("Show the unique ID (uid: ####) in tooltips.");
+	sizer->Add(tooltip_show_uid_chkbox, 0, wxALL, 5);
+
+	// Show door ID checkbox
+	tooltip_show_doorid_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show door ID in tooltips");
+	tooltip_show_doorid_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_DOORID));
+	tooltip_show_doorid_chkbox->SetToolTip("Show the door ID (door id: #) in tooltips.");
+	sizer->Add(tooltip_show_doorid_chkbox, 0, wxALL, 5);
+
+	// Show destination checkbox
+	tooltip_show_destination_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show destination in tooltips");
+	tooltip_show_destination_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_DESTINATION));
+	tooltip_show_destination_chkbox->SetToolTip("Show the teleport destination (destination: x, y, z) in tooltips.");
+	sizer->Add(tooltip_show_destination_chkbox, 0, wxALL, 5);
+
+	// Show house ID checkbox
+	tooltip_show_houseid_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Show house ID in tooltips");
+	tooltip_show_houseid_chkbox->SetValue(g_settings.getBoolean(Config::TOOLTIP_SHOW_HOUSEID));
+	tooltip_show_houseid_chkbox->SetToolTip("Show the house ID on house tiles.");
+	sizer->Add(tooltip_show_houseid_chkbox, 0, wxALL, 5);
+	
+	// Custom house colors
+	house_custom_colors_chkbox = newd wxCheckBox(tooltip_page, wxID_ANY, "Use custom house colors");
+	house_custom_colors_chkbox->SetValue(g_settings.getBoolean(Config::HOUSE_CUSTOM_COLORS));
+	house_custom_colors_chkbox->SetToolTip("Color house tiles differently based on their house ID. Works with all items on house tiles.");
+	sizer->Add(house_custom_colors_chkbox, 0, wxALL, 5);
+
+	tooltip_page->SetSizerAndFit(sizer);
+	return tooltip_page;
+}
+
 // Event handlers!
 
 void PreferencesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
@@ -902,6 +1094,24 @@ void PreferencesWindow::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 
 void PreferencesWindow::OnClickApply(wxCommandEvent& WXUNUSED(event)) {
 	Apply();
+}
+
+void PreferencesWindow::OnForceReloadRevScripts(wxCommandEvent& WXUNUSED(event)) {
+//this function can only be called by button so no if statement.
+		// Save the current RevScript directory setting first
+		g_settings.setString(Config::OTS_DATA_DIRECTORY, nstr(revscript_directory_picker->GetPath()));
+		
+		// Call the GUI's reload method
+		g_gui.ReloadRevScripts();
+		
+		// Show statistics for debugging - include RevScripts, Monsters, and NPCs
+		std::string revscript_stats = g_gui.revscript_manager.getScanStatistics();
+		std::string monster_stats = g_gui.monster_manager.getScanStatistics();
+		std::string npc_stats = g_gui.npc_manager.getScanStatistics();
+		
+		wxString message = "Scripts reloaded!\n\n" + wxstr(revscript_stats) + "\n\n" + wxstr(monster_stats) + "\n\n" + wxstr(npc_stats);
+		wxMessageBox(message, "Script Reload Complete", wxOK | wxICON_INFORMATION, this);
+	
 }
 
 void PreferencesWindow::OnCollapsiblePane(wxCollapsiblePaneEvent& event) {
@@ -929,6 +1139,7 @@ void PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::SHOW_TILESET_EDITOR, enable_tileset_editing_chkbox->GetValue());
 	
 	g_settings.setInteger(Config::AUTO_SELECT_RAW_ON_RIGHTCLICK, auto_select_raw_chkbox->GetValue());
+	g_settings.setInteger(Config::SUPPRESS_MAP_WARNINGS, !show_map_warnings_chkbox->GetValue());
 	g_settings.setInteger(Config::UNDO_SIZE, undo_size_spin->GetValue());
 	g_settings.setInteger(Config::UNDO_MEM_SIZE, undo_mem_size_spin->GetValue());
 	g_settings.setInteger(Config::WORKER_THREADS, worker_threads_spin->GetValue());
@@ -936,6 +1147,9 @@ void PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::COPY_POSITION_FORMAT, position_format->GetSelection());
 	g_settings.setInteger(Config::AUTO_SAVE_ENABLED, autosave_chkbox->GetValue());
 	g_settings.setInteger(Config::AUTO_SAVE_INTERVAL, autosave_interval_spin->GetValue());
+
+	// RevScript directory
+	g_settings.setString(Config::OTS_DATA_DIRECTORY, nstr(revscript_directory_picker->GetPath()));
 
 	// LOD Settings
 	g_settings.setInteger(Config::TOOLTIP_MAX_ZOOM, tooltip_max_zoom_spin->GetValue());
@@ -958,12 +1172,14 @@ void PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::WARN_FOR_DUPLICATE_ID, duplicate_id_warn_chkbox->GetValue());
 	g_settings.setInteger(Config::HOUSE_BRUSH_REMOVE_ITEMS, house_remove_chkbox->GetValue());
 	g_settings.setInteger(Config::AUTO_ASSIGN_DOORID, auto_assign_doors_chkbox->GetValue());
+	g_settings.setInteger(Config::AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE, auto_assign_depot_to_closest_temple_chkbox->GetValue());
 	g_settings.setInteger(Config::ERASER_LEAVE_UNIQUE, eraser_leave_unique_chkbox->GetValue());
 	g_settings.setInteger(Config::DOODAD_BRUSH_ERASE_LIKE, doodad_erase_same_chkbox->GetValue());
 	g_settings.setInteger(Config::AUTO_CREATE_SPAWN, auto_create_spawn_chkbox->GetValue());
 	g_settings.setInteger(Config::RAW_LIKE_SIMONE, allow_multiple_orderitems_chkbox->GetValue());
 	g_settings.setInteger(Config::MERGE_MOVE, merge_move_chkbox->GetValue());
 	g_settings.setInteger(Config::MERGE_PASTE, merge_paste_chkbox->GetValue());
+	g_settings.setInteger(Config::REFRESH_RADIUS, refresh_radius_spin->GetValue());
 
 
 	// Graphics
@@ -1092,6 +1308,7 @@ void PreferencesWindow::Apply() {
 		version_counter++;
 	}
 	g_settings.setInteger(Config::CHECK_SIGNATURES, check_sigs_chkbox->GetValue());
+	g_settings.setInteger(Config::FORCE_CLIENT_ITEMS_OTB, force_client_otb_chkbox->GetValue());
 
 	// Make sure to reload client paths
 	ClientVersion::saveVersions();
@@ -1130,10 +1347,174 @@ void PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::BORDERIZE_DRAG_THRESHOLD, borderize_drag_threshold_spin->GetValue());
 	g_settings.setInteger(Config::CUSTOM_BORDER_ENABLED, custom_border_checkbox->GetValue());
 	g_settings.setInteger(Config::CUSTOM_BORDER_ID, custom_border_id_spin->GetValue());
+
+	// Tooltip Info
+	g_settings.setInteger(Config::TOOLTIP_SHOW, tooltip_enable_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_HASSCRIPT, tooltip_show_hasscript_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_TEXT, tooltip_show_text_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_ITEMID, tooltip_show_itemid_chkbox->GetValue());
+	g_settings.setString(Config::TOOLTIP_IGNORE_IDS, nstr(tooltip_ignore_ids_textctrl->GetValue()));
+	g_settings.setInteger(Config::TOOLTIP_SHOW_AID, tooltip_show_aid_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_UID, tooltip_show_uid_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_DOORID, tooltip_show_doorid_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_DESTINATION, tooltip_show_destination_chkbox->GetValue());
+	g_settings.setInteger(Config::TOOLTIP_SHOW_HOUSEID, tooltip_show_houseid_chkbox->GetValue());
+	g_settings.setInteger(Config::HOUSE_CUSTOM_COLORS, house_custom_colors_chkbox->GetValue());
+
+	// Invisible Items Colors
+	g_settings.setInteger(Config::INVISIBLE_ITEMS_ENABLE_CUSTOM, invisible_items_custom_chkbox->GetValue());
+	
+	wxColor invalid_color = invisible_invalid_color_pick->GetColour();
+	g_settings.setInteger(Config::INVISIBLE_INVALID_RED, invalid_color.Red());
+	g_settings.setInteger(Config::INVISIBLE_INVALID_GREEN, invalid_color.Green());
+	g_settings.setInteger(Config::INVISIBLE_INVALID_BLUE, invalid_color.Blue());
+	
+	wxColor stairs_color = invisible_stairs_color_pick->GetColour();
+	g_settings.setInteger(Config::INVISIBLE_STAIRS_RED, stairs_color.Red());
+	g_settings.setInteger(Config::INVISIBLE_STAIRS_GREEN, stairs_color.Green());
+	g_settings.setInteger(Config::INVISIBLE_STAIRS_BLUE, stairs_color.Blue());
+	
+	wxColor walkable_color = invisible_walkable_color_pick->GetColour();
+	g_settings.setInteger(Config::INVISIBLE_WALKABLE_RED, walkable_color.Red());
+	g_settings.setInteger(Config::INVISIBLE_WALKABLE_GREEN, walkable_color.Green());
+	g_settings.setInteger(Config::INVISIBLE_WALKABLE_BLUE, walkable_color.Blue());
+	
+	wxColor wall_color = invisible_wall_color_pick->GetColour();
+	g_settings.setInteger(Config::INVISIBLE_WALL_RED, wall_color.Red());
+	g_settings.setInteger(Config::INVISIBLE_WALL_GREEN, wall_color.Green());
+	g_settings.setInteger(Config::INVISIBLE_WALL_BLUE, wall_color.Blue());
+	
+	g_settings.setString(Config::INVISIBLE_CUSTOM_IDS, nstr(invisible_custom_ids_textctrl->GetValue()));
+
+	// Reload invisible items color settings
+	InvisibleItemsColorManager::ReloadFromSettings();
+
+	// Client Box Settings
+	g_settings.setInteger(Config::INGAME_BOX_CUSTOM_SIZE_ENABLED, ingame_box_custom_size_chkbox->GetValue());
+	g_settings.setInteger(Config::INGAME_BOX_WIDTH, ingame_box_width_spin->GetValue());
+	g_settings.setInteger(Config::INGAME_BOX_HEIGHT, ingame_box_height_spin->GetValue());
+	g_settings.setInteger(Config::INGAME_BOX_OFFSET_X, ingame_box_offset_x_spin->GetValue());
+	g_settings.setInteger(Config::INGAME_BOX_OFFSET_Y, ingame_box_offset_y_spin->GetValue());
 }
 
 void PreferencesWindow::UpdateDarkModeUI() {
 	bool enabled = dark_mode_chkbox->GetValue();
 	dark_mode_color_enabled_chkbox->Enable(enabled);
 	dark_mode_color_pick->Enable(enabled && dark_mode_color_enabled_chkbox->GetValue());
+}
+
+wxNotebookPage* PreferencesWindow::CreateInvisibleItemsPage() {
+	wxNotebookPage* invisible_page = newd wxPanel(book, wxID_ANY);
+	
+	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+
+	// Enable custom colors checkbox
+	invisible_items_custom_chkbox = newd wxCheckBox(invisible_page, wxID_ANY, "Enable custom invisible item colors");
+	invisible_items_custom_chkbox->SetValue(g_settings.getBoolean(Config::INVISIBLE_ITEMS_ENABLE_CUSTOM));
+	invisible_items_custom_chkbox->SetToolTip("When enabled, use custom colors for invisible items instead of the default hardcoded colors.");
+	sizer->Add(invisible_items_custom_chkbox, 0, wxLEFT | wxTOP, 5);
+
+	sizer->AddSpacer(10);
+
+	// Color pickers for predefined invisible items
+	auto* grid_sizer = newd wxFlexGridSizer(2, 10, 10);
+	grid_sizer->AddGrowableCol(1);
+
+	// Invalid items color (ID = 0)
+	wxStaticText* invalid_label = newd wxStaticText(invisible_page, wxID_ANY, "Invalid items (ID=0):");
+	grid_sizer->Add(invalid_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	wxColor current_invalid_color(
+		g_settings.getInteger(Config::INVISIBLE_INVALID_RED),
+		g_settings.getInteger(Config::INVISIBLE_INVALID_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_INVALID_BLUE)
+	);
+	invisible_invalid_color_pick = newd wxColourPickerCtrl(invisible_page, wxID_ANY, current_invalid_color);
+	invisible_invalid_color_pick->SetToolTip("Color for invalid items (clientID = 0)");
+	grid_sizer->Add(invisible_invalid_color_pick, 0);
+
+	// Invisible stairs color (469)
+	wxStaticText* stairs_label = newd wxStaticText(invisible_page, wxID_ANY, "Invisible stairs (469):");
+	grid_sizer->Add(stairs_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	wxColor current_stairs_color(
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_RED),
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_BLUE)
+	);
+	invisible_stairs_color_pick = newd wxColourPickerCtrl(invisible_page, wxID_ANY, current_stairs_color);
+	invisible_stairs_color_pick->SetToolTip("Color for invisible stairs tiles (clientID = 469)");
+	grid_sizer->Add(invisible_stairs_color_pick, 0);
+
+	// Invisible walkable tiles color (470, etc.)
+	wxStaticText* walkable_label = newd wxStaticText(invisible_page, wxID_ANY, "Invisible walkable (470, 17970, 20028, 34168):");
+	grid_sizer->Add(walkable_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	wxColor current_walkable_color(
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_RED),
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_BLUE)
+	);
+	invisible_walkable_color_pick = newd wxColourPickerCtrl(invisible_page, wxID_ANY, current_walkable_color);
+	invisible_walkable_color_pick->SetToolTip("Color for invisible walkable tiles (clientID = 470, 17970, 20028, 34168)");
+	grid_sizer->Add(invisible_walkable_color_pick, 0);
+
+	// Invisible wall color (2187)
+	wxStaticText* wall_label = newd wxStaticText(invisible_page, wxID_ANY, "Invisible wall (2187):");
+	grid_sizer->Add(wall_label, 0, wxALIGN_CENTER_VERTICAL);
+	
+	wxColor current_wall_color(
+		g_settings.getInteger(Config::INVISIBLE_WALL_RED),
+		g_settings.getInteger(Config::INVISIBLE_WALL_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_WALL_BLUE)
+	);
+	invisible_wall_color_pick = newd wxColourPickerCtrl(invisible_page, wxID_ANY, current_wall_color);
+	invisible_wall_color_pick->SetToolTip("Color for invisible wall tiles (clientID = 2187)");
+	grid_sizer->Add(invisible_wall_color_pick, 0);
+
+	sizer->Add(grid_sizer, 0, wxEXPAND | wxALL, 6);
+
+	sizer->AddSpacer(15);
+
+	// Custom IDs section
+	wxStaticText* custom_label = newd wxStaticText(invisible_page, wxID_ANY, "Custom invisible item IDs:");
+	sizer->Add(custom_label, 0, wxLEFT | wxTOP, 5);
+
+	wxStaticText* format_label = newd wxStaticText(invisible_page, wxID_ANY, "Format: ID:R,G,B;ID:R,G,B (e.g., 1234:255,0,0;5678:0,255,0)");
+	format_label->SetFont(format_label->GetFont().Smaller());
+	sizer->Add(format_label, 0, wxLEFT | wxTOP, 5);
+
+	invisible_custom_ids_textctrl = newd wxTextCtrl(invisible_page, wxID_ANY, 
+		wxstr(g_settings.getString(Config::INVISIBLE_CUSTOM_IDS)),
+		wxDefaultPosition, wxSize(400, 60), wxTE_MULTILINE);
+	invisible_custom_ids_textctrl->SetToolTip("Add custom invisible item IDs with their colors. Each entry should be in format ID:R,G,B separated by semicolons.");
+	sizer->Add(invisible_custom_ids_textctrl, 0, wxEXPAND | wxALL, 5);
+
+	// Connect events to update UI state
+	invisible_items_custom_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+		UpdateInvisibleItemsUI();
+	});
+	
+	// Initial update of UI state
+	UpdateInvisibleItemsUI();
+
+	invisible_page->SetSizerAndFit(sizer);
+	return invisible_page;
+}
+
+void PreferencesWindow::UpdateInvisibleItemsUI() {
+	bool enabled = invisible_items_custom_chkbox->GetValue();
+	invisible_invalid_color_pick->Enable(enabled);
+	invisible_stairs_color_pick->Enable(enabled);
+	invisible_walkable_color_pick->Enable(enabled);
+	invisible_wall_color_pick->Enable(enabled);
+	invisible_custom_ids_textctrl->Enable(enabled);
+}
+
+void PreferencesWindow::UpdateClientBoxUI() {
+	bool enabled = ingame_box_custom_size_chkbox->GetValue();
+	ingame_box_width_spin->Enable(enabled);
+	ingame_box_height_spin->Enable(enabled);
+	ingame_box_offset_x_spin->Enable(enabled);
+	ingame_box_offset_y_spin->Enable(enabled);
 }

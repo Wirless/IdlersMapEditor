@@ -190,6 +190,15 @@ void MinimapWindow::RenderThreadFunction() {
 				dc.SetBackground(*wxBLACK_BRUSH);
 				dc.Clear();
 				
+				// CRITICAL FIX: Prevent division by zero in minimap rendering
+				if (window_width <= 0 || window_height <= 0) {
+					char debug_msg[256];
+					sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! Minimap window dimensions are zero: width=%d, height=%d\n", 
+						window_width, window_height);
+					OutputDebugStringA(debug_msg);
+					return; // Exit early to prevent division by zero
+				}
+				
 				int start_x = center_x - window_width / 2;
 				int start_y = center_y - window_height / 2;
 				
@@ -361,6 +370,15 @@ void MinimapWindow::OnPaint(wxPaintEvent& event) {
 	// Get window dimensions
 	int windowWidth = wxPanel::GetSize().GetWidth();
 	int windowHeight = wxPanel::GetSize().GetHeight();
+	
+	// CRITICAL FIX: Prevent division by zero in minimap OnPaint
+	if (windowWidth <= 0 || windowHeight <= 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! Minimap OnPaint dimensions are zero: width=%d, height=%d\n", 
+			windowWidth, windowHeight);
+		OutputDebugStringA(debug_msg);
+		return; // Exit early to prevent division by zero
+	}
 	
 	// Draw header with map info
 	int headerHeight = 30;
@@ -567,6 +585,15 @@ void MinimapWindow::OnMouseClick(wxMouseEvent& event) {
 	
 	int windowWidth = GetSize().GetWidth();
 	int windowHeight = GetSize().GetHeight();
+	
+	// CRITICAL FIX: Prevent division by zero in minimap click handling
+	if (windowWidth <= 0 || windowHeight <= 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! Minimap click dimensions are zero: width=%d, height=%d\n", 
+			windowWidth, windowHeight);
+		OutputDebugStringA(debug_msg);
+		return; // Exit early to prevent division by zero
+	}
 	
 	// Calculate the map position clicked
 	int clickX = event.GetX();

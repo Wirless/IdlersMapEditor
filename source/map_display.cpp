@@ -43,6 +43,7 @@
 #include "map_drawer.h"
 #include "application.h"
 #include "live_server.h"
+#include "live_client.h"
 #include "browse_tile_window.h"
 
 #include "minimap_window.h"
@@ -64,7 +65,7 @@
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
-EVT_KEY_DOWN(MapCanvas::OnKeyUp)
+EVT_KEY_UP(MapCanvas::OnKeyUp)
 
 // Mouse events
 EVT_MOTION(MapCanvas::OnMouseMove)
@@ -90,13 +91,17 @@ EVT_MENU(MAP_POPUP_MENU_COPY_POSITION, MapCanvas::OnCopyPosition)
 EVT_MENU(MAP_POPUP_MENU_PASTE, MapCanvas::OnPaste)
 EVT_MENU(MAP_POPUP_MENU_DELETE, MapCanvas::OnDelete)
 EVT_MENU(MAP_POPUP_MENU_FILL, MapCanvas::OnFill)
-EVT_MENU(MAP_POPUP_MENU_GENERATE_ISLAND, MapCanvas::OnGenerateIsland)
+
 EVT_MENU(MAP_POPUP_MENU_CREATE_HOUSE, MapCanvas::OnCreateHouse)
 EVT_MENU(MAP_POPUP_MENU_FIND_SIMILAR_ITEMS, MapCanvas::OnFindSimilarItems)
 //----
 EVT_MENU(MAP_POPUP_MENU_COPY_SERVER_ID, MapCanvas::OnCopyServerId)
 EVT_MENU(MAP_POPUP_MENU_COPY_CLIENT_ID, MapCanvas::OnCopyClientId)
 EVT_MENU(MAP_POPUP_MENU_COPY_NAME, MapCanvas::OnCopyName)
+EVT_MENU(MAP_POPUP_MENU_COPY_ACTION_ID, MapCanvas::OnCopyActionId)
+EVT_MENU(MAP_POPUP_MENU_COPY_UNIQUE_ID, MapCanvas::OnCopyUniqueId)
+EVT_MENU(MAP_POPUP_MENU_PASTE_ACTION_ID, MapCanvas::OnPasteActionId)
+EVT_MENU(MAP_POPUP_MENU_PASTE_UNIQUE_ID, MapCanvas::OnPasteUniqueId)
 // ----
 EVT_MENU(MAP_POPUP_MENU_ROTATE, MapCanvas::OnRotateItem)
 EVT_MENU(MAP_POPUP_MENU_GOTO, MapCanvas::OnGotoDestination)
@@ -120,6 +125,10 @@ EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
 EVT_MENU(MAP_POPUP_MENU_BROWSE_TILE, MapCanvas::OnBrowseTile)
 // Add to the event table after other MAP_POPUP_MENU items
 EVT_MENU(MAP_POPUP_MENU_SELECTION_TO_DOODAD, MapCanvas::OnSelectionToDoodad)
+EVT_MENU(MAP_POPUP_MENU_OPEN_REVSCRIPT, MapCanvas::OnOpenRevScript)
+EVT_MENU(MAP_POPUP_MENU_OPEN_NPC_XML, MapCanvas::OnOpenNPCXML)
+EVT_MENU(MAP_POPUP_MENU_OPEN_NPC_SCRIPT, MapCanvas::OnOpenNPCScript)
+EVT_MENU(MAP_POPUP_MENU_OPEN_MONSTER_XML, MapCanvas::OnOpenMonsterXML)
 
 END_EVENT_TABLE()
 
@@ -490,6 +499,13 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event) {
 			int move_x = drag_start_x - mouse_map_x;
 			int move_y = drag_start_y - mouse_map_y;
 			int move_z = drag_start_z - floor;
+			
+			// Add debugging output for drag calculations
+			char debug_msg[512];
+			sprintf(debug_msg, "DEBUG DRAG: Dragging detected - start_pos=(%d,%d,%d), mouse_pos=(%d,%d,%d), move_offset=(%d,%d,%d)\n", 
+				drag_start_x, drag_start_y, drag_start_z, mouse_map_x, mouse_map_y, floor, move_x, move_y, move_z);
+			OutputDebugStringA(debug_msg);
+			
 			ss << "Dragging " << -move_x << "," << -move_y << "," << -move_z;
 			g_gui.SetStatusText(ss);
 
@@ -948,11 +964,27 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 	int move_x = last_click_map_x - mouse_map_x;
 	int move_y = last_click_map_y - mouse_map_y;
 	int move_z = last_click_map_z - floor;
+	
+	// Add debugging output for mouse action release
+	char debug_msg[512];
+	sprintf(debug_msg, "DEBUG DRAG: OnMouseActionRelease - mouse_pos=(%d,%d), last_click=(%d,%d,%d), move_offset=(%d,%d,%d)\n", 
+		mouse_map_x, mouse_map_y, last_click_map_x, last_click_map_y, last_click_map_z, move_x, move_y, move_z);
+	OutputDebugStringA(debug_msg);
 
 	if (g_gui.IsSelectionMode()) {
 		if (dragging && (move_x != 0 || move_y != 0 || move_z != 0)) {
+			sprintf(debug_msg, "DEBUG DRAG: Calling editor.moveSelection with Position(%d,%d,%d), dragging=%d\n", 
+				move_x, move_y, move_z, dragging);
+			OutputDebugStringA(debug_msg);
+			
 			editor.moveSelection(Position(move_x, move_y, move_z));
+			
+			OutputDebugStringA("DEBUG DRAG: editor.moveSelection completed\n");
 		} else {
+			sprintf(debug_msg, "DEBUG DRAG: Not moving selection - dragging=%d, move_offset=(%d,%d,%d)\n", 
+				dragging, move_x, move_y, move_z);
+			OutputDebugStringA(debug_msg);
+			
 			if (boundbox_selection) {
 				if (mouse_map_x == last_click_map_x && mouse_map_y == last_click_map_y && event.ControlDown()) {
 					// Mouse hasn't moved, do control+shift thingy!
@@ -1047,6 +1079,15 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 					if (width < threadcount) {
 						threadcount = min(1, width);
 					}
+					
+					// CRITICAL FIX: Prevent division by zero
+					if (threadcount <= 0) {
+						char debug_msg[256];
+						sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! threadcount=%d, width=%d - FORCING threadcount to 1\n", threadcount, width);
+						OutputDebugStringA(debug_msg);
+						threadcount = 1;
+					}
+					
 					// Let's divide!
 					int remainder = width;
 					int cleared = 0;
@@ -1125,7 +1166,23 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event) {
 				int map_x = start_map_x + (end_map_x - start_map_x) / 2;
 				int map_y = start_map_y + (end_map_y - start_map_y) / 2;
 
-				int width = min(g_settings.getInteger(Config::MAX_SPAWN_RADIUS), ((end_map_x - start_map_x) / 2 + (end_map_y - start_map_y) / 2) / 2);
+				// CRITICAL FIX: Prevent division by zero in spawn size calculation
+				int raw_width = (end_map_x - start_map_x) / 2 + (end_map_y - start_map_y) / 2;
+				if (raw_width <= 0) {
+					char debug_msg[256];
+					sprintf(debug_msg, "DEBUG DRAG: WARNING! Spawn calculation resulted in width %d - FORCING TO 1\n", raw_width);
+					OutputDebugStringA(debug_msg);
+					raw_width = 1;
+				}
+				
+				int width = min(g_settings.getInteger(Config::MAX_SPAWN_RADIUS), raw_width / 2);
+				if (width <= 0) {
+					char debug_msg[256];
+					sprintf(debug_msg, "DEBUG DRAG: WARNING! Final spawn width %d - FORCING TO 1\n", width);
+					OutputDebugStringA(debug_msg);
+					width = 1;
+				}
+				
 				int old = g_gui.GetBrushSize();
 				g_gui.SetBrushSize(width);
 				editor.draw(Position(map_x, map_y, floor), event.AltDown());
@@ -1747,6 +1804,14 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 			}
 			break;
 		}
+		case WXK_F5: { // Refresh visible area (for multiplayer)
+			LiveClient* client = dynamic_cast<LiveClient*>(editor.GetLiveClient());
+			if (client) {
+				client->requestVisibleRefresh();
+				g_gui.SetStatusText("Refreshing visible area...");
+			}
+			break;
+		}
 		case WXK_DELETE: { // Delete
 			editor.destroySelection();
 			g_gui.RefreshView();
@@ -1874,6 +1939,62 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 }
 
 void MapCanvas::OnKeyUp(wxKeyEvent& event) {
+	// ESC key - cancel custom brush size
+	if (event.GetKeyCode() == WXK_ESCAPE && g_gui.UseCustomBrushSize()) {
+		g_gui.SetCustomBrushSize(false);
+		g_gui.SetStatusText("Restored standard brush size");
+		Refresh();
+		return;
+	}
+	
+	// If Shift key is released while dragging with brush, set custom brush size (square brushes only)
+	if (event.GetKeyCode() == WXK_SHIFT && dragging_draw && g_gui.GetCurrentBrush() && g_gui.GetCurrentBrush()->canDrag()) {
+		int current_map_x, current_map_y;
+		MouseToMap(&current_map_x, &current_map_y);
+		
+		// Only allow custom brush size for square brushes
+		if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
+			int width = std::abs(current_map_x - last_click_map_x) + 1;  // +1 to include the tile itself
+			int height = std::abs(current_map_y - last_click_map_y) + 1; // +1 to include the tile itself
+			
+			// CRITICAL FIX: Prevent zero-sized brushes after movement
+			if (width <= 0) {
+				char debug_msg[256];
+				sprintf(debug_msg, "DEBUG DRAG: WARNING! Movement resulted in width %d - FORCING TO 1\n", width);
+				OutputDebugStringA(debug_msg);
+				width = 1;
+			}
+			
+			if (height <= 0) {
+				char debug_msg[256];
+				sprintf(debug_msg, "DEBUG DRAG: WARNING! Movement resulted in height %d - FORCING TO 1\n", height);
+				OutputDebugStringA(debug_msg);
+				height = 1;
+			}
+			
+			if (width > 0 && height > 0) {
+				// Enable custom brush dimensions with specific width and height
+				// No need to adjust for center pixel - accept any dimensions
+				g_gui.SetCustomBrushSize(true, width, height);
+				
+				// End drag drawing mode but keep drawing mode active
+				dragging_draw = false;
+				
+				// Update status bar
+				wxString ss;
+				ss << "Custom brush size set to " << width << "x" << height;
+				g_gui.SetStatusText(ss);
+			}
+			Refresh();
+		} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
+			// Circle brushes use traditional radius-based sizing - no custom sizes allowed
+			// End drag drawing mode
+			dragging_draw = false;
+			g_gui.SetStatusText("Circle brushes use traditional radius sizing");
+			Refresh();
+		}
+	}
+	
 	keyCode = WXK_NONE;
 }
 
@@ -2001,6 +2122,125 @@ void MapCanvas::OnCopyName(wxCommandEvent& WXUNUSED(event)) {
 		obj->SetText(wxstr(item->getName()));
 		wxTheClipboard->SetData(obj);
 
+		wxTheClipboard->Close();
+	}
+}
+
+void MapCanvas::OnCopyActionId(wxCommandEvent& WXUNUSED(event)) {
+	ASSERT(editor.selection.size() == 1);
+
+	if (wxTheClipboard->Open()) {
+		Tile* tile = editor.selection.getSelectedTile();
+		ItemVector selected_items = tile->getSelectedItems();
+		ASSERT(selected_items.size() == 1);
+
+		const Item* item = selected_items.front();
+
+		wxTextDataObject* obj = new wxTextDataObject();
+		obj->SetText(i2ws(item->getActionID()));
+		wxTheClipboard->SetData(obj);
+
+		wxTheClipboard->Close();
+	}
+}
+
+void MapCanvas::OnCopyUniqueId(wxCommandEvent& WXUNUSED(event)) {
+	ASSERT(editor.selection.size() == 1);
+
+	if (wxTheClipboard->Open()) {
+		Tile* tile = editor.selection.getSelectedTile();
+		ItemVector selected_items = tile->getSelectedItems();
+		ASSERT(selected_items.size() == 1);
+
+		const Item* item = selected_items.front();
+
+		wxTextDataObject* obj = new wxTextDataObject();
+		obj->SetText(i2ws(item->getUniqueID()));
+		wxTheClipboard->SetData(obj);
+
+		wxTheClipboard->Close();
+	}
+}
+
+void MapCanvas::OnPasteActionId(wxCommandEvent& WXUNUSED(event)) {
+	ASSERT(editor.selection.size() == 1);
+
+	if (wxTheClipboard->Open()) {
+		if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
+			wxTextDataObject data;
+			wxTheClipboard->GetData(data);
+			
+			long actionId;
+			if (data.GetText().ToLong(&actionId) && actionId >= 0 && actionId <= 0xFFFF) {
+				Tile* tile = editor.selection.getSelectedTile();
+				if (!tile) {
+					wxTheClipboard->Close();
+					return;
+				}
+				
+				Tile* new_tile = tile->deepCopy(editor.map);
+				ItemVector selected_items = new_tile->getSelectedItems();
+				
+				if (selected_items.size() == 1) {
+					Item* item = selected_items.front();
+					item->setActionID(static_cast<uint16_t>(actionId));
+					
+					Action* action = editor.actionQueue->createAction(ACTION_CHANGE_PROPERTIES);
+					action->addChange(newd Change(new_tile));
+					editor.addAction(action);
+					g_gui.RefreshView();
+				} else {
+					delete new_tile;
+				}
+			} else {
+				g_gui.PopupDialog(g_gui.root, "Error", "Invalid Action ID value in clipboard. Must be a number between 0 and 65535.", wxOK);
+			}
+		}
+		wxTheClipboard->Close();
+	}
+}
+
+void MapCanvas::OnPasteUniqueId(wxCommandEvent& WXUNUSED(event)) {
+	ASSERT(editor.selection.size() == 1);
+
+	if (wxTheClipboard->Open()) {
+		if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
+			wxTextDataObject data;
+			wxTheClipboard->GetData(data);
+			
+			long uniqueId;
+			if (data.GetText().ToLong(&uniqueId) && uniqueId >= 0 && uniqueId <= 0xFFFF) {
+				// Validate unique ID range (typically 1000-65535 for non-zero values)
+				if (uniqueId != 0 && (uniqueId < 1000 || uniqueId > 0xFFFF)) {
+					g_gui.PopupDialog(g_gui.root, "Error", "Unique ID must be 0 or between 1000 and 65535.", wxOK);
+					wxTheClipboard->Close();
+					return;
+				}
+				
+				Tile* tile = editor.selection.getSelectedTile();
+				if (!tile) {
+					wxTheClipboard->Close();
+					return;
+				}
+				
+				Tile* new_tile = tile->deepCopy(editor.map);
+				ItemVector selected_items = new_tile->getSelectedItems();
+				
+				if (selected_items.size() == 1) {
+					Item* item = selected_items.front();
+					item->setUniqueID(static_cast<uint16_t>(uniqueId));
+					
+					Action* action = editor.actionQueue->createAction(ACTION_CHANGE_PROPERTIES);
+					action->addChange(newd Change(new_tile));
+					editor.addAction(action);
+					g_gui.RefreshView();
+				} else {
+					delete new_tile;
+				}
+			} else {
+				g_gui.PopupDialog(g_gui.root, "Error", "Invalid Unique ID value in clipboard. Must be a number between 0 and 65535.", wxOK);
+			}
+		}
 		wxTheClipboard->Close();
 	}
 }
@@ -2576,6 +2816,16 @@ void MapPopupMenu::Update() {
 				Append(MAP_POPUP_MENU_COPY_SERVER_ID, "Copy Item Server Id", "Copy the server id of this item");
 				Append(MAP_POPUP_MENU_COPY_CLIENT_ID, "Copy Item Client Id", "Copy the client id of this item");
 				Append(MAP_POPUP_MENU_COPY_NAME, "Copy Item Name", "Copy the name of this item");
+				
+				// Add copy/paste for ActionID and UniqueID
+				wxString actionIdLabel = wxString::Format("Copy action ID (%d)", topSelectedItem->getActionID());
+				wxString uniqueIdLabel = wxString::Format("Copy unique ID (%d)", topSelectedItem->getUniqueID());
+				
+				Append(MAP_POPUP_MENU_COPY_ACTION_ID, actionIdLabel, "Copy the action ID of this item");
+				Append(MAP_POPUP_MENU_COPY_UNIQUE_ID, uniqueIdLabel, "Copy the unique ID of this item");
+				Append(MAP_POPUP_MENU_PASTE_ACTION_ID, "Paste action ID", "Paste action ID from clipboard to this item");
+				Append(MAP_POPUP_MENU_PASTE_UNIQUE_ID, "Paste unique ID", "Paste unique ID from clipboard to this item");
+				
 				AppendSeparator();
 			}
 
@@ -2603,6 +2853,17 @@ void MapPopupMenu::Update() {
 
 				if (topCreature) {
 					Append(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, "Select Creature", "Uses the current creature as a creature brush");
+					
+					// Add creature-specific menu items
+					if (topCreature->isNpc()) {
+						AppendSeparator();
+						Append(MAP_POPUP_MENU_OPEN_NPC_XML, "Open NPC &XML", "Open the NPC XML file in external editor");
+						Append(MAP_POPUP_MENU_OPEN_NPC_SCRIPT, "Open NPC &Script", "Open the NPC Lua script file in external editor");
+					} else {
+						// This is a monster
+						AppendSeparator();
+						Append(MAP_POPUP_MENU_OPEN_MONSTER_XML, "Open Monster &XML", "Open the Monster XML file in external editor");
+					}
 				}
 
 				if (topSpawn) {
@@ -2650,10 +2911,66 @@ void MapPopupMenu::Update() {
 				AppendSeparator();
 
 				Append(MAP_POPUP_MENU_PROPERTIES, "&Properties", "Properties for the current object");
+				
+				// Add RevScript menu item if the selected item has scripts available
+				if (topSelectedItem) {
+					int actionId = topSelectedItem->getActionID();
+					int uniqueId = topSelectedItem->getUniqueID();
+					int itemId = topSelectedItem->getID();
+					
+					bool hasActionScript = actionId != 0 && g_gui.revscript_manager.hasScriptForActionID(actionId);
+					bool hasUniqueScript = uniqueId != 0 && g_gui.revscript_manager.hasScriptForUniqueID(uniqueId);
+					bool hasItemScript = g_gui.revscript_manager.hasScriptForItemID(itemId);
+					
+					if (actionId != 0 || uniqueId != 0 || hasItemScript) {
+						wxString revscriptLabel = "Open &RevScript";
+						wxString tooltip = "Open the script file for this item";
+						
+						// Build detailed label showing what scripts are available
+						wxArrayString scriptTypes;
+						if (hasActionScript) {
+							scriptTypes.Add(wxString::Format("AID:%d", actionId));
+						}
+						if (hasUniqueScript) {
+							scriptTypes.Add(wxString::Format("UID:%d", uniqueId));
+						}
+						if (hasItemScript) {
+							scriptTypes.Add(wxString::Format("ID:%d", itemId));
+						}
+						
+						// If scripts exist, show which ones. If not, show what we're looking for
+						if (hasActionScript || hasUniqueScript || hasItemScript) {
+							revscriptLabel = wxString::Format("Open &RevScript (%s)", wxJoin(scriptTypes, ','));
+							tooltip = "Open the script file(s) for this item";
+						} else {
+							// No scripts found, but show what we could look for
+							wxArrayString potentialTypes;
+							if (actionId != 0) potentialTypes.Add(wxString::Format("AID:%d", actionId));
+							if (uniqueId != 0) potentialTypes.Add(wxString::Format("UID:%d", uniqueId));
+							potentialTypes.Add(wxString::Format("ID:%d", itemId));
+							
+							revscriptLabel = wxString::Format("Look for &RevScript (%s)", wxJoin(potentialTypes, ','));
+							tooltip = "Search for script files for this item (no scripts currently found)";
+						}
+						
+						Append(MAP_POPUP_MENU_OPEN_REVSCRIPT, revscriptLabel, tooltip);
+					}
+				}
 			} else {
 
 				if (topCreature) {
 					Append(MAP_POPUP_MENU_SELECT_CREATURE_BRUSH, "Select Creature", "Uses the current creature as a creature brush");
+					
+					// Add creature-specific menu items
+					if (topCreature->isNpc()) {
+						AppendSeparator();
+						Append(MAP_POPUP_MENU_OPEN_NPC_XML, "Open NPC &XML", "Open the NPC XML file in external editor");
+						Append(MAP_POPUP_MENU_OPEN_NPC_SCRIPT, "Open NPC &Script", "Open the NPC Lua script file in external editor");
+					} else {
+						// This is a monster
+						AppendSeparator();
+						Append(MAP_POPUP_MENU_OPEN_MONSTER_XML, "Open Monster &XML", "Open the Monster XML file in external editor");
+					}
 				}
 
 				if (topSpawn) {
@@ -2727,20 +3044,82 @@ void MapCanvas::getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, Posi
 		floodFill(&editor.map, position, BLOCK_SIZE / 2, BLOCK_SIZE / 2, oldBrush, tilestodraw);
 
 	} else {
-		for (int y = -g_gui.GetBrushSize() - 1; y <= g_gui.GetBrushSize() + 1; y++) {
-			for (int x = -g_gui.GetBrushSize() - 1; x <= g_gui.GetBrushSize() + 1; x++) {
-				if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
-					if (x >= -g_gui.GetBrushSize() && x <= g_gui.GetBrushSize() && y >= -g_gui.GetBrushSize() && y <= g_gui.GetBrushSize()) {
+		if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
+			// Use custom dimensions for square brushes
+			int brush_width = g_gui.GetBrushWidth();
+			int brush_height = g_gui.GetBrushHeight();
+			
+			// Add debugging output for brush dimensions
+			char debug_msg[512];
+			sprintf(debug_msg, "DEBUG DRAG: Initial brush dimensions - width=%d, height=%d\n", brush_width, brush_height);
+			OutputDebugStringA(debug_msg);
+			
+			// Make sure we have valid non-zero dimensions
+			if (brush_width <= 0) {
+				OutputDebugStringA("DEBUG DRAG: WARNING! brush_width <= 0, forcing to 1\n");
+				brush_width = 1;
+			}
+			if (brush_height <= 0) {
+				OutputDebugStringA("DEBUG DRAG: WARNING! brush_height <= 0, forcing to 1\n");
+				brush_height = 1;
+			}
+			
+			sprintf(debug_msg, "DEBUG DRAG: Corrected brush dimensions - width=%d, height=%d\n", brush_width, brush_height);
+			OutputDebugStringA(debug_msg);
+			
+			// For even-sized brushes, we need to adjust the offset
+			int width_offset = (brush_width % 2 == 0) ? 0 : 1;
+			int height_offset = (brush_height % 2 == 0) ? 0 : 1;
+			
+			// Calculate the start position (top-left corner of the brush)
+			int start_x = -brush_width / 2;
+			int start_y = -brush_height / 2;
+			
+			// For even width, we need to shift by 1 to avoid center bias
+			if (brush_width % 2 == 0) start_x += 1;
+			if (brush_height % 2 == 0) start_y += 1;
+			
+			// Calculate the end position (bottom-right corner of the brush)
+			int end_x = start_x + brush_width - 1;
+			int end_y = start_y + brush_height - 1;
+			
+			// Extend by 1 for border calculation
+			int border_start_x = start_x - 1;
+			int border_start_y = start_y - 1;
+			int border_end_x = end_x + 1;
+			int border_end_y = end_y + 1;
+			
+			sprintf(debug_msg, "DEBUG DRAG: Calculated bounds - start_x=%d, start_y=%d, end_x=%d, end_y=%d\n", 
+				start_x, start_y, end_x, end_y);
+			OutputDebugStringA(debug_msg);
+				
+			// Draw with a 1-tile margin around the brush for the border/preview
+			for (int y = border_start_y; y <= border_end_y; y++) {
+				for (int x = border_start_x; x <= border_end_x; x++) {
+					// For square brushes, all tiles within the rectangle are drawn
+					if (x >= start_x && x <= end_x && y >= start_y && y <= end_y) {
 						if (tilestodraw) {
 							tilestodraw->push_back(Position(mouse_map_x + x, mouse_map_y + y, floor));
 						}
 					}
-					if (std::abs(x) - g_gui.GetBrushSize() < 2 && std::abs(y) - g_gui.GetBrushSize() < 2) {
+					
+					// Border is 1 tile around the brush edges
+					bool is_border = 
+						(x >= border_start_x && x <= border_end_x && y >= border_start_y && y <= border_end_y) && // Within extended area
+						!(x > start_x && x < end_x && y > start_y && y < end_y); // But not fully inside
+						
+					if (is_border) {
 						if (tilestoborder) {
 							tilestoborder->push_back(Position(mouse_map_x + x, mouse_map_y + y, floor));
 						}
 					}
-				} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
+				}
+			}
+		} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
+			// Circle brushes use traditional radius-based calculation
+			for (int y = -g_gui.GetBrushSize() - 1; y <= g_gui.GetBrushSize() + 1; y++) {
+				for (int x = -g_gui.GetBrushSize() - 1; x <= g_gui.GetBrushSize() + 1; x++) {
+					// Circle brushes use traditional radius-based calculation (ignore custom brush size)
 					double distance = sqrt(double(x * x) + double(y * y));
 					if (distance < g_gui.GetBrushSize() + 0.005) {
 						if (tilestodraw) {
@@ -3582,20 +3961,7 @@ void MapCanvas::OnFindSimilarItems(wxCommandEvent& WXUNUSED(event)) {
     dialog->Destroy();
 }
 
-void MapCanvas::OnGenerateIsland(wxCommandEvent& event) {
-    // Get cursor position for island generation
-    int map_x, map_y;
-    MouseToMap(&map_x, &map_y);
 
-    // Create and show the island generator dialog
-	IslandGeneratorDialog dialog(this);
-    
-    // Set the initial position to the clicked location
-	dialog.SetStartPosition(Position(map_x, map_y, floor));
-	
-	dialog.ShowModal();
-	Refresh();
-}
 
 void MapCanvas::OnCreateHouse(wxCommandEvent& event) {
     int start_map_x = last_click_map_x;
@@ -4501,4 +4867,233 @@ bool MapCanvas::hasStairsOrLadder(Tile* tile) {
     }
     
     return false;
+}
+
+void MapCanvas::OnOpenRevScript(wxCommandEvent& WXUNUSED(event)) {
+	if (editor.selection.size() != 1) {
+		return;
+	}
+
+	Tile* tile = editor.selection.getSelectedTile();
+	if (!tile) {
+		return;
+	}
+
+	ItemVector selected_items = tile->getSelectedItems();
+	if (selected_items.empty()) {
+		return;
+	}
+
+	Item* item = selected_items.back(); // Get the top selected item
+	if (!item) {
+		return;
+	}
+
+	// Check if the RevScript manager is loaded
+	if (!g_gui.revscript_manager.isLoaded()) {
+		g_gui.PopupDialog("Script Error", "No OTS data directory has been loaded. Please load a map first or configure the OTS data directory in preferences.", wxOK);
+		return;
+	}
+
+	// Get action ID, unique ID, and item ID from the item
+	uint16_t action_id = item->getActionID();
+	uint16_t unique_id = item->getUniqueID();
+	uint16_t item_id = item->getID();
+
+	std::vector<RevScriptEntry> entries;
+
+	// Search for scripts by action ID
+	if (action_id > 0) {
+		auto aid_entries = g_gui.revscript_manager.findByActionID(action_id);
+		entries.insert(entries.end(), aid_entries.begin(), aid_entries.end());
+	}
+
+	// Search for scripts by unique ID
+	if (unique_id > 0) {
+		auto uid_entries = g_gui.revscript_manager.findByUniqueID(unique_id);
+		entries.insert(entries.end(), uid_entries.begin(), uid_entries.end());
+	}
+
+	// Search for scripts by item ID (includes XML-based actions and movements)
+	auto id_entries = g_gui.revscript_manager.findByItemID(item_id);
+	entries.insert(entries.end(), id_entries.begin(), id_entries.end());
+
+	if (entries.empty()) {
+		wxString message = "No script entries found for this item.";
+		message += wxString::Format("\nChecked: Item ID %d", item_id);
+		if (action_id > 0) {
+			message += wxString::Format(", Action ID %d", action_id);
+		}
+		if (unique_id > 0) {
+			message += wxString::Format(", Unique ID %d", unique_id);
+		}
+		message += "\nSearched: RevScript files, Actions XML, and Movements XML";
+		g_gui.PopupDialog("Script Not Found", message, wxOK);
+		return;
+	}
+
+	// If only one entry found, open it directly
+	if (entries.size() == 1) {
+		const RevScriptEntry& entry = entries[0];
+		if (!g_gui.revscript_manager.openRevScript(entry)) {
+			g_gui.PopupDialog("Error", "Failed to open the script file. Make sure you have a text editor installed.", wxOK);
+		}
+		return;
+	}
+
+	// Multiple entries found, show a selection dialog
+	wxArrayString choices;
+	for (const auto& entry : entries) {
+		wxString choice;
+		if (entry.script_type == "revscript") {
+			choice = wxString::Format("[RevScript] %s:%d - %s (%s: %d)",
+				wxstr(entry.filename), entry.line_number, 
+				wxstr(entry.function_name.empty() ? "global" : entry.function_name),
+				wxstr(entry.id_type), entry.id_value);
+		} else if (entry.script_type == "action") {
+			choice = wxString::Format("[Action] %s (%s: %d)",
+				wxstr(entry.filename),
+				wxstr(entry.id_type), entry.id_value);
+		} else if (entry.script_type == "movement") {
+			choice = wxString::Format("[Movement] %s (%s: %d)",
+				wxstr(entry.filename),
+				wxstr(entry.id_type), entry.id_value);
+		} else {
+			choice = wxString::Format("[%s] %s (%s: %d)",
+				wxstr(entry.script_type),
+				wxstr(entry.filename),
+				wxstr(entry.id_type), entry.id_value);
+		}
+		choices.Add(choice);
+	}
+
+	int selection = wxGetSingleChoiceIndex(
+		wxString::Format("Multiple script entries found for this item (Item ID: %d). Select one to open:", item_id),
+		"Select Script",
+		choices,
+		g_gui.root
+	);
+
+	if (selection != -1) {
+		const RevScriptEntry& entry = entries[selection];
+		if (!g_gui.revscript_manager.openRevScript(entry)) {
+			g_gui.PopupDialog("Error", "Failed to open the script file. Make sure you have a text editor installed.", wxOK);
+		}
+	}
+}
+
+void MapCanvas::OnOpenNPCXML(wxCommandEvent& WXUNUSED(event)) {
+	if (editor.selection.size() != 1) {
+		return;
+	}
+
+	Tile* tile = editor.selection.getSelectedTile();
+	if (!tile || !tile->creature) {
+		return;
+	}
+
+	Creature* creature = tile->creature;
+	if (!creature->isNpc()) {
+		return;
+	}
+
+	// Check if the NPC manager is loaded
+	if (!g_gui.npc_manager.isLoaded()) {
+		g_gui.PopupDialog("NPC Error", "No OTS data directory has been loaded. Please load a map first or configure the OTS data directory in preferences.", wxOK);
+		return;
+	}
+
+	// Find the NPC entry by name
+	NPCEntry* npc_entry = g_gui.npc_manager.findByName(creature->getName());
+	if (!npc_entry) {
+		g_gui.PopupDialog("NPC Not Found", 
+			wxString::Format("No NPC XML file found for '%s'.\nMake sure the NPC data directory is correctly configured in preferences.", 
+			wxstr(creature->getName())), wxOK);
+		return;
+	}
+
+	// Open the XML file
+	if (!g_gui.npc_manager.openNPCXML(*npc_entry)) {
+		g_gui.PopupDialog("Error", "Failed to open the NPC XML file. Make sure you have a text editor installed.", wxOK);
+	}
+}
+
+void MapCanvas::OnOpenNPCScript(wxCommandEvent& WXUNUSED(event)) {
+	if (editor.selection.size() != 1) {
+		return;
+	}
+
+	Tile* tile = editor.selection.getSelectedTile();
+	if (!tile || !tile->creature) {
+		return;
+	}
+
+	Creature* creature = tile->creature;
+	if (!creature->isNpc()) {
+		return;
+	}
+
+	// Check if the NPC manager is loaded
+	if (!g_gui.npc_manager.isLoaded()) {
+		g_gui.PopupDialog("NPC Error", "No OTS data directory has been loaded. Please load a map first or configure the OTS data directory in preferences.", wxOK);
+		return;
+	}
+
+	// Find the NPC entry by name
+	NPCEntry* npc_entry = g_gui.npc_manager.findByName(creature->getName());
+	if (!npc_entry) {
+		g_gui.PopupDialog("NPC Not Found", 
+			wxString::Format("No NPC XML file found for '%s'.\nMake sure the NPC data directory is correctly configured in preferences.", 
+			wxstr(creature->getName())), wxOK);
+		return;
+	}
+
+	// Check if the NPC has a script
+	if (!npc_entry->hasScript || npc_entry->script_path.empty()) {
+		g_gui.PopupDialog("No Script", 
+			wxString::Format("NPC '%s' does not have a script file configured.", 
+			wxstr(creature->getName())), wxOK);
+		return;
+	}
+
+	// Open the script file
+	if (!g_gui.npc_manager.openNPCScript(*npc_entry)) {
+		g_gui.PopupDialog("Error", "Failed to open the NPC script file. Make sure the script file exists and you have a text editor installed.", wxOK);
+	}
+}
+
+void MapCanvas::OnOpenMonsterXML(wxCommandEvent& WXUNUSED(event)) {
+	if (editor.selection.size() != 1) {
+		return;
+	}
+
+	Tile* tile = editor.selection.getSelectedTile();
+	if (!tile || !tile->creature) {
+		return;
+	}
+
+	Creature* creature = tile->creature;
+	if (creature->isNpc()) {
+		return; // This is for monsters only
+	}
+
+	// Check if the Monster manager is loaded
+	if (!g_gui.monster_manager.isLoaded()) {
+		g_gui.PopupDialog("Monster Error", "No OTS data directory has been loaded. Please load a map first or configure the OTS data directory in preferences.", wxOK);
+		return;
+	}
+
+	// Find the Monster entry by name
+	MonsterEntry* monster_entry = g_gui.monster_manager.findByName(creature->getName());
+	if (!monster_entry) {
+		g_gui.PopupDialog("Monster Not Found", 
+			wxString::Format("No Monster XML file found for '%s'.\nMake sure the Monster data directory is correctly configured in preferences.", 
+			wxstr(creature->getName())), wxOK);
+		return;
+	}
+
+	// Open the XML file
+	if (!g_gui.monster_manager.openMonsterXML(*monster_entry)) {
+		g_gui.PopupDialog("Error", "Failed to open the Monster XML file. Make sure you have a text editor installed.", wxOK);
+	}
 }

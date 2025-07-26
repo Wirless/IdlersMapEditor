@@ -150,6 +150,7 @@
 #include "main.h"
 
 #include <wx/display.h>
+#include <wx/dir.h>
 
 #include "gui.h"
 #include "main_menubar.h"
@@ -174,6 +175,8 @@
 #include "live_client.h"
 #include "live_tab.h"
 #include "live_server.h"
+#include "recent_brushes_window.h"
+#include "monster_maker_window.h"
 #include "dark_mode_manager.h"
 #include <wx/regex.h>
 
@@ -196,9 +199,11 @@ GUI::GUI() :
 	hotkeys_enabled(true),
 	search_result_window(nullptr),
 	map_summary_window(nullptr),
+	monster_maker_window(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
 	secondary_map(nullptr),
 	minimap(nullptr),
+	recent_brushes_window(nullptr),
 	has_last_search(false),
 	last_search_itemid(0),
 	last_search_on_selection(false),
@@ -228,11 +233,14 @@ GUI::GUI() :
 	current_brush(nullptr),
 	previous_brush(nullptr),
 	brush_shape(BRUSHSHAPE_SQUARE),
-	brush_size(0),
+	brush_size(1), // Initialize to 1 instead of 0 to prevent division by zero
 	brush_variation(0),
 	draw_locked_doors(false),
 	use_custom_thickness(false),
 	custom_thickness_mod(0.0),
+	use_custom_brush_size(false),
+	custom_brush_width(0),
+	custom_brush_height(0),
 	progressBar(nullptr),
 	progressFrom(0),
 	progressTo(0),
@@ -557,7 +565,15 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	}
 
 	g_gui.SetLoadDone(20, "Loading items.otb file...");
-	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
+	wxString otb_path;
+	if (g_settings.getBoolean(Config::FORCE_CLIENT_ITEMS_OTB)) {
+		// Load from client folder
+		otb_path = client_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb";
+	} else {
+		// Load from data folder (default behavior)
+		otb_path = data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb";
+	}
+	if (!g_items.loadFromOtb(otb_path, error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();
 		UnloadVersion();
@@ -565,7 +581,15 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	}
 
 	g_gui.SetLoadDone(30, "Loading items.xml ...");
-	if (!g_items.loadFromGameXml(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
+	wxString xml_path;
+	if (g_settings.getBoolean(Config::FORCE_CLIENT_ITEMS_OTB)) {
+		// Load from client folder
+		xml_path = client_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml";
+	} else {
+		// Load from data folder (default behavior)
+		xml_path = data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml";
+	}
+	if (!g_items.loadFromGameXml(xml_path, error, warnings)) {
 		warnings.push_back("Couldn't load items.xml: " + error);
 	}
 
@@ -795,7 +819,9 @@ bool GUI::LoadMap(const FileName& fileName) {
 
 	mapTab->GetView()->FitToMap();
 	UpdateTitle();
-	ListDialog("Map loader errors", mapTab->GetMap()->getWarnings());
+	
+
+	
 	root->DoQueryImportCreatures();
 
 	FitViewToMap(mapTab);
@@ -804,6 +830,111 @@ bool GUI::LoadMap(const FileName& fileName) {
 	// Pre-cache the entire minimap for smooth performance
 	if (minimap && IsMinimapVisible()) {
 		minimap->PreCacheEntireMap();
+	}
+
+	// Load OTS scripts directory for the map
+	wxFileName mapPath(fileName.GetFullPath());
+	wxString mapDir = mapPath.GetPath();
+	
+	// Check if we can find an OTS data directory
+	bool scriptsLoaded = false;
+	bool monstersLoaded = false;
+	bool npcsLoaded = false;
+	
+	// Strategy 0: Use custom OTS Data directory if set
+	std::string customDataPath = g_settings.getString(Config::OTS_DATA_DIRECTORY);
+	if (!customDataPath.empty()) {
+		wxString customPath = wxstr(customDataPath);
+		if (wxDir::Exists(customPath)) {
+			if (revscript_manager.scanRevScriptsDirectory(customDataPath)) {
+				scriptsLoaded = true;
+			}
+			if (monster_manager.scanMonstersDirectory(customDataPath)) {
+				monstersLoaded = true;
+			}
+			if (npc_manager.scanNPCDirectory(customDataPath)) {
+				npcsLoaded = true;
+			}
+			if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+				SetStatusText("OTS data directory loaded (custom): " + customPath);
+			}
+		}
+	}
+	
+	// Strategy 1: Look for data directory in same directory as map
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxString dataPath = mapDir + wxFileName::GetPathSeparator() + "data";
+		if (wxDir::Exists(dataPath)) {
+			if (revscript_manager.scanRevScriptsDirectory(nstr(dataPath))) {
+				scriptsLoaded = true;
+			}
+			if (monster_manager.scanMonstersDirectory(nstr(dataPath))) {
+				monstersLoaded = true;
+			}
+			if (npc_manager.scanNPCDirectory(nstr(dataPath))) {
+				npcsLoaded = true;
+			}
+			if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+				SetStatusText("OTS data directory loaded: " + dataPath);
+			}
+		}
+	}
+	
+	// Strategy 2: Go up one directory level and look for data
+	// This handles the common case where map is in /data/world/ and we need to find /data/
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxFileName parentPath(mapDir);
+		if (parentPath.GetDirCount() > 0) {
+			parentPath.RemoveLastDir();  // Go up one level (from world to data)
+			wxString parentDataPath = parentPath.GetPath();
+			
+			// Check if this looks like the data directory (contains scripts, actions, movements, monsters, or npcs)
+			wxString scriptsCheck = parentDataPath + wxFileName::GetPathSeparator() + "scripts";
+			wxString actionsCheck = parentDataPath + wxFileName::GetPathSeparator() + "actions";
+			wxString monstersCheck = parentDataPath + wxFileName::GetPathSeparator() + "monsters";
+			wxString npcsCheck = parentDataPath + wxFileName::GetPathSeparator() + "npc";
+			if (wxDir::Exists(scriptsCheck) || wxDir::Exists(actionsCheck) || wxDir::Exists(monstersCheck) || wxDir::Exists(npcsCheck)) {
+				if (revscript_manager.scanRevScriptsDirectory(nstr(parentDataPath))) {
+					scriptsLoaded = true;
+				}
+				if (monster_manager.scanMonstersDirectory(nstr(parentDataPath))) {
+					monstersLoaded = true;
+				}
+				if (npc_manager.scanNPCDirectory(nstr(parentDataPath))) {
+					npcsLoaded = true;
+				}
+				if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+					SetStatusText("OTS data directory loaded: " + parentDataPath);
+				}
+			}
+		}
+	}
+	
+	// Strategy 3: Look for data directory as sibling to map directory
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxFileName mapParent(mapDir);
+		if (mapParent.GetDirCount() > 0) {
+			mapParent.RemoveLastDir();  // Go up to parent of map directory
+			wxString siblingDataPath = mapParent.GetPath() + wxFileName::GetPathSeparator() + "data";
+			if (wxDir::Exists(siblingDataPath)) {
+				if (revscript_manager.scanRevScriptsDirectory(nstr(siblingDataPath))) {
+					scriptsLoaded = true;
+				}
+				if (monster_manager.scanMonstersDirectory(nstr(siblingDataPath))) {
+					monstersLoaded = true;
+				}
+				if (npc_manager.scanNPCDirectory(nstr(siblingDataPath))) {
+					npcsLoaded = true;
+				}
+				if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+					SetStatusText("OTS data directory loaded: " + siblingDataPath);
+				}
+			}
+		}
+	}
+	
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		SetStatusText("No OTS data directory found");
 	}
 
 	std::string path = g_settings.getString(Config::RECENT_EDITED_MAP_PATH);
@@ -817,6 +948,212 @@ bool GUI::LoadMap(const FileName& fileName) {
 		}
 	}
 	return true;
+}
+
+void GUI::ReloadRevScripts() {
+	if (!IsEditorOpen()) {
+		SetStatusText("No map open - cannot reload scripts");
+		return;
+	}
+	
+	// Get the current map file path
+	Editor* editor = GetCurrentEditor();
+	if (!editor || !editor->map.hasFile()) {
+		SetStatusText("Map has no file - cannot determine OTS data directory");
+		return;
+	}
+	
+	FileName fileName(wxstr(editor->map.getFilename()));
+	wxFileName mapPath(fileName.GetFullPath());
+	wxString mapDir = mapPath.GetPath();
+	
+	// Check if we can find an OTS data directory
+	bool scriptsLoaded = false;
+	bool monstersLoaded = false;
+	bool npcsLoaded = false;
+	
+	// Strategy 0: Use custom OTS Data directory if set
+	// ADDITIONALY THERE SHOULD BE FALLBACK TO CURRENTLY LOADED MAP DIR cd ..
+	// since the map dir 99% of time is /data/world which means we are 1 back dir from /data folder :D
+	std::string customDataPath = g_settings.getString(Config::OTS_DATA_DIRECTORY);
+	if (!customDataPath.empty()) {
+		wxString customPath = wxstr(customDataPath);
+		if (wxDir::Exists(customPath)) {
+			if (revscript_manager.scanRevScriptsDirectory(customDataPath)) {
+				scriptsLoaded = true;
+			}
+			if (monster_manager.scanMonstersDirectory(customDataPath)) {
+				monstersLoaded = true;
+			}
+			if (npc_manager.scanNPCDirectory(customDataPath)) {
+				npcsLoaded = true;
+			}
+			if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+				SetStatusText("OTS data directory reloaded (custom): " + customPath);
+			}
+		}
+	}
+	
+	// Strategy 1: Look for data directory in same directory as map
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxString dataPath = mapDir + wxFileName::GetPathSeparator() + "data";
+		if (wxDir::Exists(dataPath)) {
+			if (revscript_manager.scanRevScriptsDirectory(nstr(dataPath))) {
+				scriptsLoaded = true;
+			}
+			if (monster_manager.scanMonstersDirectory(nstr(dataPath))) {
+				monstersLoaded = true;
+			}
+			if (npc_manager.scanNPCDirectory(nstr(dataPath))) {
+				npcsLoaded = true;
+			}
+			if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+				SetStatusText("OTS data directory reloaded: " + dataPath);
+			}
+		}
+	}
+	
+	// Strategy 2: Go up one directory level and look for data
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxFileName parentPath(mapDir);
+		if (parentPath.GetDirCount() > 0) {
+			parentPath.RemoveLastDir();  // Go up one level (from world to data)
+			wxString parentDataPath = parentPath.GetPath();
+			
+			// Check if this looks like the data directory (contains scripts, actions, movements, monsters, or npcs)
+			wxString scriptsCheck = parentDataPath + wxFileName::GetPathSeparator() + "scripts";
+			wxString actionsCheck = parentDataPath + wxFileName::GetPathSeparator() + "actions";
+			wxString monstersCheck = parentDataPath + wxFileName::GetPathSeparator() + "monsters";
+			wxString npcsCheck = parentDataPath + wxFileName::GetPathSeparator() + "npc";
+			if (wxDir::Exists(scriptsCheck) || wxDir::Exists(actionsCheck) || wxDir::Exists(monstersCheck) || wxDir::Exists(npcsCheck)) {
+				if (revscript_manager.scanRevScriptsDirectory(nstr(parentDataPath))) {
+					scriptsLoaded = true;
+				}
+				if (monster_manager.scanMonstersDirectory(nstr(parentDataPath))) {
+					monstersLoaded = true;
+				}
+				if (npc_manager.scanNPCDirectory(nstr(parentDataPath))) {
+					npcsLoaded = true;
+				}
+				if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+					SetStatusText("OTS data directory reloaded: " + parentDataPath);
+				}
+			}
+		}
+	}
+	
+	// Strategy 3: Look for data directory as sibling to map directory
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		wxFileName mapParent(mapDir);
+		if (mapParent.GetDirCount() > 0) {
+			mapParent.RemoveLastDir();  // Go up to parent of map directory
+			wxString siblingDataPath = mapParent.GetPath() + wxFileName::GetPathSeparator() + "data";
+			if (wxDir::Exists(siblingDataPath)) {
+				if (revscript_manager.scanRevScriptsDirectory(nstr(siblingDataPath))) {
+					scriptsLoaded = true;
+				}
+				if (monster_manager.scanMonstersDirectory(nstr(siblingDataPath))) {
+					monstersLoaded = true;
+				}
+				if (npc_manager.scanNPCDirectory(nstr(siblingDataPath))) {
+					npcsLoaded = true;
+				}
+				if (scriptsLoaded || monstersLoaded || npcsLoaded) {
+					SetStatusText("OTS data directory reloaded: " + siblingDataPath);
+				}
+			}
+		}
+	}
+	
+	if (!scriptsLoaded && !monstersLoaded && !npcsLoaded) {
+		SetStatusText("No OTS data directory found for reload");
+	}
+}
+
+void GUI::ReloadNPCs() {
+	if (!IsEditorOpen()) {
+		SetStatusText("No map open - cannot reload NPCs");
+		return;
+	}
+	
+	// Get the current map file path
+	Editor* editor = GetCurrentEditor();
+	if (!editor || !editor->map.hasFile()) {
+		SetStatusText("Map has no file - cannot determine OTS data directory");
+		return;
+	}
+	
+	FileName fileName(wxstr(editor->map.getFilename()));
+	wxFileName mapPath(fileName.GetFullPath());
+	wxString mapDir = mapPath.GetPath();
+	
+	// Check if we can find an OTS data directory
+	bool npcsLoaded = false;
+	
+	// Strategy 0: Use custom OTS Data directory if set
+	std::string customDataPath = g_settings.getString(Config::OTS_DATA_DIRECTORY);
+	if (!customDataPath.empty()) {
+		wxString customPath = wxstr(customDataPath);
+		if (wxDir::Exists(customPath)) {
+			if (npc_manager.scanNPCDirectory(customDataPath)) {
+				npcsLoaded = true;
+				SetStatusText("NPCs reloaded (custom): " + customPath);
+			}
+		}
+	}
+	
+	// Strategy 1: Look for data directory in same directory as map
+	if (!npcsLoaded) {
+		wxString dataPath = mapDir + wxFileName::GetPathSeparator() + "data";
+		if (wxDir::Exists(dataPath)) {
+			if (npc_manager.scanNPCDirectory(nstr(dataPath))) {
+				npcsLoaded = true;
+				SetStatusText("NPCs reloaded: " + dataPath);
+			}
+		}
+	}
+	
+	// Strategy 2: Go up one directory level and look for data
+	if (!npcsLoaded) {
+		wxFileName parentPath(mapDir);
+		if (parentPath.GetDirCount() > 0) {
+			parentPath.RemoveLastDir();  // Go up one level (from world to data)
+			wxString parentDataPath = parentPath.GetPath();
+			
+			// Check if this looks like the data directory (contains npc directory)
+			wxString npcsCheck = parentDataPath + wxFileName::GetPathSeparator() + "npc";
+			if (wxDir::Exists(npcsCheck)) {
+				if (npc_manager.scanNPCDirectory(nstr(parentDataPath))) {
+					npcsLoaded = true;
+					SetStatusText("NPCs reloaded: " + parentDataPath);
+				}
+			}
+		}
+	}
+	
+	// Strategy 3: Look for data directory as sibling to map directory
+	if (!npcsLoaded) {
+		wxFileName mapParent(mapDir);
+		if (mapParent.GetDirCount() > 0) {
+			mapParent.RemoveLastDir();  // Go up to parent of map directory
+			wxString siblingDataPath = mapParent.GetPath() + wxFileName::GetPathSeparator() + "data";
+			if (wxDir::Exists(siblingDataPath)) {
+				if (npc_manager.scanNPCDirectory(nstr(siblingDataPath))) {
+					npcsLoaded = true;
+					SetStatusText("NPCs reloaded: " + siblingDataPath);
+				}
+			}
+		}
+	}
+	
+	if (!npcsLoaded) {
+		SetStatusText("No NPC data directory found for reload");
+	} else {
+		// Show statistics for debugging
+		std::string stats = npc_manager.getScanStatistics();
+		wxString message = "NPCs reloaded!\n\n" + wxstr(stats);
+		wxMessageBox(message, "NPC Reload Complete", wxOK | wxICON_INFORMATION, this->root);
+	}
 }
 
 Editor* GUI::GetCurrentEditor() {
@@ -1358,6 +1695,114 @@ MapSummaryWindow* GUI::ShowMapSummaryWindow() {
 	}
 	aui_manager->Update();
 	return map_summary_window;
+}
+
+//=============================================================================
+// Recent Brushes Window Interface Implementation
+
+void GUI::HideRecentBrushesWindow() {
+	if (recent_brushes_window) {
+		aui_manager->GetPane(recent_brushes_window).Show(false);
+		aui_manager->Update();
+	}
+}
+
+RecentBrushesWindow* GUI::GetRecentBrushesWindow() {
+	return recent_brushes_window;
+}
+
+RecentBrushesWindow* GUI::ShowRecentBrushesWindow() {
+	if (recent_brushes_window == nullptr) {
+		recent_brushes_window = newd RecentBrushesWindow(root);
+		
+		// Add as dockable pane on the right side
+		wxAuiPaneInfo paneInfo;
+		paneInfo.Caption("Recent Brushes")
+			.Right()  // Dock on the right side initially
+			.Floatable(true)
+			.Movable(true)
+			.Dockable(true)
+			.Resizable(true)
+			.MinSize(120, 200)
+			.BestSize(150, 400)
+			.DestroyOnClose(false);
+			
+		aui_manager->AddPane(recent_brushes_window, paneInfo);
+	} else {
+		aui_manager->GetPane(recent_brushes_window).Show();
+	}
+	aui_manager->Update();
+	return recent_brushes_window;
+}
+
+void GUI::AddRecentBrush(Brush* brush) {
+	// Don't add null brushes or system brushes that shouldn't be in recent list
+	if (!brush || brush == eraser) {
+		return;
+	}
+	
+	// Don't add creature, house, or waypoint brushes to recent list
+	if (brush->isCreature() || brush->isHouse() || brush->isWaypoint()) {
+		return;
+	}
+	
+	// Determine palette type for this brush
+	PaletteType palette_type = TILESET_UNKNOWN;
+	
+	// Check what type of brush this is
+	if (brush->isRaw()) {
+		palette_type = TILESET_RAW;
+	} else {
+		// For other brushes, try to determine from current palette selection
+		PaletteWindow* palette = GetPalette();
+		if (palette) {
+			palette_type = palette->GetSelectedPage();
+		}
+		
+		// If we still don't know, try to categorize by brush properties
+		if (palette_type == TILESET_UNKNOWN) {
+			if (brush->isGround()) {
+				palette_type = TILESET_TERRAIN;
+			} else if (brush->isDoodad()) {
+				palette_type = TILESET_DOODAD;
+			} else {
+				palette_type = TILESET_ITEM;
+			}
+		}
+	}
+	
+	if (recent_brushes_window) {
+		// Only add as manual selection (true) to prevent automatic palette switching additions
+		recent_brushes_window->AddRecentBrush(brush, palette_type, true);
+	}
+}
+
+//=============================================================================
+// Monster Maker Window Interface Implementation
+
+void GUI::HideMonsterMakerWindow() {
+	if (monster_maker_window) {
+		monster_maker_window->Hide();
+	}
+}
+
+MonsterMakerWindow* GUI::GetMonsterMakerWindow() {
+	return monster_maker_window;
+}
+
+MonsterMakerWindow* GUI::ShowMonsterMakerWindow() {
+	if (monster_maker_window == nullptr) {
+		monster_maker_window = newd MonsterMakerWindow(root);
+	}
+	
+	// Refresh the monster list when showing
+	monster_maker_window->RefreshMonsterList();
+	
+	// Show as detached window
+	monster_maker_window->Show(true);
+	monster_maker_window->Raise();
+	
+	return monster_maker_window;
 }
 
 //=============================================================================
@@ -2020,23 +2465,61 @@ void GUI::SetDrawingMode() {
 }
 
 void GUI::SetBrushSizeInternal(int nz) {
-	if (nz != brush_size && current_brush && current_brush->isDoodad() && !current_brush->oneSizeFitsAll()) {
-		brush_size = nz;
-		FillDoodadPreviewBuffer();
-		secondary_map = doodad_buffer_map.get();
-	} else {
-		brush_size = nz;
+	// Add safety check to prevent brush_size from being 0
+	if (nz < 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: WARNING! SetBrushSizeInternal called with negative value %d - FORCING TO 0\n", nz);
+		OutputDebugStringA(debug_msg);
+		nz = 0; // Minimum valid brush_size index
+	}
+	
+	brush_size = nz;
+	
+	// ENHANCED FIX: Validate that the calculated actual size is safe
+	int actual_width = GetBrushWidth();
+	int actual_height = GetBrushHeight();
+	
+	if (actual_width <= 0 || actual_height <= 0) {
+		char debug_msg[512];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! SetBrushSizeInternal resulted in invalid dimensions: width=%d, height=%d, brush_size=%d\n", 
+			actual_width, actual_height, brush_size);
+		OutputDebugStringA(debug_msg);
+		
+		// Force to safe values
+		if (actual_width <= 0) brush_size = 0; // Reset to minimal safe brush size
+		if (actual_height <= 0) brush_size = 0;
 	}
 }
 
 void GUI::SetBrushSize(int nz) {
-	SetBrushSizeInternal(nz);
-
-	for (auto& palette : palettes) {
-		palette->OnUpdateBrushSize(brush_shape, brush_size);
+	// CRITICAL FIX: Prevent brush_size from being set to invalid values
+	if (nz < 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: WARNING! SetBrushSize called with negative value %d - FORCING TO 0\n", nz);
+		OutputDebugStringA(debug_msg);
+		nz = 0; // Minimum valid brush_size index
 	}
-
-	root->GetAuiToolBar()->UpdateBrushSize(brush_shape, brush_size);
+	
+	brush_size = nz;
+	
+	// ENHANCED FIX: Validate that the calculated actual size is safe
+	int actual_width = GetBrushWidth();
+	int actual_height = GetBrushHeight();
+	
+	if (actual_width <= 0 || actual_height <= 0) {
+		char debug_msg[512];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! SetBrushSize resulted in invalid dimensions: width=%d, height=%d, brush_size=%d\n", 
+			actual_width, actual_height, brush_size);
+		OutputDebugStringA(debug_msg);
+		
+		// Force to safe values
+		if (actual_width <= 0) brush_size = 0; // Reset to minimal safe brush size
+		if (actual_height <= 0) brush_size = 0;
+	}
+	
+	for (PaletteList::iterator iter = palettes.begin(); iter != palettes.end(); ++iter) {
+		(*iter)->OnUpdateBrushSize(brush_shape, brush_size);
+	}
 }
 
 void GUI::SetBrushVariation(int nz) {
@@ -2056,6 +2539,12 @@ void GUI::SetBrushShape(BrushShape bs) {
 		secondary_map = doodad_buffer_map.get();
 	}
 	brush_shape = bs;
+	
+	// Disable custom brush size when switching to circle brush
+	if (bs == BRUSHSHAPE_CIRCLE && use_custom_brush_size) {
+		use_custom_brush_size = false;
+		SetStatusText("Custom brush size disabled for circle brush");
+	}
 
 	for (auto& palette : palettes) {
 		palette->OnUpdateBrushSize(brush_shape, brush_size);
@@ -2219,6 +2708,11 @@ bool GUI::SelectBrush(const Brush* whatbrush, PaletteType primary) {
 			return false;
 		}
 	}
+	
+	// Reset custom brush size when switching brushes
+	if (use_custom_brush_size) {
+		use_custom_brush_size = false;
+	}
 
 	if (!palettes.front()->OnSelectBrush(whatbrush, primary)) {
 		return false;
@@ -2236,6 +2730,9 @@ void GUI::SelectBrushInternal(Brush* brush) {
 	if (!current_brush) {
 		return;
 	}
+
+	// Note: AddRecentBrush is now called manually from palette clicks and other user actions
+	// This prevents automatic additions when palettes switch and select their first brush
 
 	brush_variation = min(brush_variation, brush->getMaxVariation());
 	FillDoodadPreviewBuffer();
@@ -2423,42 +2920,60 @@ long GUI::PopupDialog(wxString title, wxString text, long style, wxString config
 }
 
 void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString& param_items) {
-	if (param_items.empty()) {
-		return;
-	}
+    if (param_items.empty()) {
+        return;
+    }
 
-	wxArrayString list_items(param_items);
+    // Check if we should suppress map warnings
+    if ((title.CmpNoCase("Warnings") == 0 || title.CmpNoCase("Warning") == 0) &&
+        g_settings.getBoolean(Config::SUPPRESS_MAP_WARNINGS)) {
+        return;
+    }
 
-	// Create the window
-	wxDialog* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+    wxArrayString list_items(param_items);
 
-	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
-	wxListBox* item_list = newd wxListBox(dlg, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE);
-	item_list->SetMinSize(wxSize(500, 300));
+    // Create the window
+    wxDialog* dlg = newd wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
 
-	for (size_t i = 0; i != list_items.GetCount();) {
-		wxString str = list_items[i];
-		size_t pos = str.find("\n");
-		if (pos != wxString::npos) {
-			// Split string!
-			item_list->Append(str.substr(0, pos));
-			list_items[i] = str.substr(pos + 1);
-			continue;
-		}
-		item_list->Append(list_items[i]);
-		++i;
-	}
-	sizer->Add(item_list, 1, wxEXPAND);
+    wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+    wxListBox* item_list = newd wxListBox(dlg, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE);
+    item_list->SetMinSize(wxSize(500, 300));
 
-	wxSizer* stdsizer = newd wxBoxSizer(wxHORIZONTAL);
-	stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(1).Center());
-	sizer->Add(stdsizer, wxSizerFlags(0).Center());
+    for (size_t i = 0; i != list_items.GetCount();) {
+        wxString str = list_items[i];
+        size_t pos = str.find("\n");
+        if (pos != wxString::npos) {
+            // Split string!
+            item_list->Append(str.substr(0, pos));
+            list_items[i] = str.substr(pos + 1);
+            continue;
+        }
+        item_list->Append(list_items[i]);
+        ++i;
+    }
+    sizer->Add(item_list, 1, wxEXPAND);
 
-	dlg->SetSizerAndFit(sizer);
+    wxCheckBox* never_show_again = nullptr;
+    if (title.CmpNoCase("Warnings") == 0 || title.CmpNoCase("Warning") == 0) {
+        never_show_again = newd wxCheckBox(dlg, wxID_ANY, "Never show again");
+        sizer->Add(never_show_again, 0, wxALL, 8);
+    }
 
-	// Show the window
-	dlg->ShowModal();
-	delete dlg;
+    wxSizer* stdsizer = newd wxBoxSizer(wxHORIZONTAL);
+    stdsizer->Add(newd wxButton(dlg, wxID_OK, "OK"), wxSizerFlags(1).Center());
+    sizer->Add(stdsizer, wxSizerFlags(0).Center());
+
+    dlg->SetSizerAndFit(sizer);
+
+    // Show the window
+    dlg->ShowModal();
+
+    // Save the setting if checked
+    if (never_show_again && never_show_again->IsChecked()) {
+        g_settings.setInteger(Config::SUPPRESS_MAP_WARNINGS, 1);
+    }
+
+    delete dlg;
 }
 
 void GUI::ShowTextBox(wxWindow* parent, wxString title, wxString content) {
@@ -2911,4 +3426,73 @@ bool GUI::IsCurrentActionIDEnabled() const {
         return palette->IsActionIDEnabled();
     }
     return false;
+}
+
+void GUI::SetCustomBrushSize(bool enable, int width, int height) {
+	// Only allow custom brush size for square brushes
+	if (enable && brush_shape != BRUSHSHAPE_SQUARE) {
+		// Silently ignore request to enable custom brush size for circle brushes
+		return;
+	}
+	
+	use_custom_brush_size = enable;
+	
+	if (width != -1) {
+		// CRITICAL FIX: Prevent zero or negative width
+		if (width <= 0) {
+			char debug_msg[256];
+			sprintf(debug_msg, "DEBUG DRAG: WARNING! SetCustomBrushSize called with invalid width %d - FORCING TO 1\n", width);
+			OutputDebugStringA(debug_msg);
+			width = 1;
+		}
+		custom_brush_width = width;
+	}
+	
+	if (height != -1) {
+		// CRITICAL FIX: Prevent zero or negative height
+		if (height <= 0) {
+			char debug_msg[256];
+			sprintf(debug_msg, "DEBUG DRAG: WARNING! SetCustomBrushSize called with invalid height %d - FORCING TO 1\n", height);
+			OutputDebugStringA(debug_msg);
+			height = 1;
+		}
+		custom_brush_height = height;
+	}
+	
+	// ENHANCED FIX: Always validate current brush dimensions
+	if (custom_brush_width <= 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! custom_brush_width is %d - FORCING TO 1\n", custom_brush_width);
+		OutputDebugStringA(debug_msg);
+		custom_brush_width = 1;
+	}
+	
+	if (custom_brush_height <= 0) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! custom_brush_height is %d - FORCING TO 1\n", custom_brush_height);
+		OutputDebugStringA(debug_msg);
+		custom_brush_height = 1;
+	}
+	
+	// Additional safety: make sure we have non-zero fallback values
+	if (custom_brush_width <= 0) {
+		custom_brush_width = std::max(1, brush_size + 1);
+	}
+	
+	if (custom_brush_height <= 0) {
+		custom_brush_height = std::max(1, brush_size + 1);
+	}
+	
+	// Unselect all brush size buttons in the UI
+	if (enable && brush_shape == BRUSHSHAPE_SQUARE) {
+		for (auto& palette : palettes) {
+			palette->OnUpdateBrushSize(brush_shape, -1);
+		}
+	} else {
+		for (auto& palette : palettes) {
+			palette->OnUpdateBrushSize(brush_shape, brush_size);
+		}
+	}
+	
+	RefreshView();
 }

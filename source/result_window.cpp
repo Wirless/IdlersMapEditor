@@ -30,6 +30,9 @@ EVT_LISTBOX(wxID_ANY, SearchResultWindow::OnClickResult)
 EVT_BUTTON(wxID_FILE, SearchResultWindow::OnClickExport)
 EVT_BUTTON(wxID_CLEAR, SearchResultWindow::OnClickClear)
 EVT_BUTTON(SEARCH_RESULT_NEXT_BUTTON, SearchResultWindow::OnClickNext)
+EVT_BUTTON(SEARCH_RESULT_SORT_NUMERICAL, SearchResultWindow::OnClickSortNumerical)
+EVT_BUTTON(SEARCH_RESULT_SORT_ALPHABETICAL, SearchResultWindow::OnClickSortAlphabetical)
+EVT_BUTTON(SEARCH_RESULT_SORT_POSITION, SearchResultWindow::OnClickSortPosition)
 END_EVENT_TABLE()
 
 SearchResultWindow::SearchResultWindow(wxWindow* parent) :
@@ -43,11 +46,19 @@ SearchResultWindow::SearchResultWindow(wxWindow* parent) :
 	result_list = newd wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(200, 330), 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB);
 	sizer->Add(result_list, wxSizerFlags(1).Expand());
 
-	wxSizer* buttonsSizer = newd wxBoxSizer(wxHORIZONTAL);
-	buttonsSizer->Add(newd wxButton(this, SEARCH_RESULT_NEXT_BUTTON, "Next"), wxSizerFlags(0).Center());
-	buttonsSizer->Add(newd wxButton(this, wxID_FILE, "Export"), wxSizerFlags(0).Center());
-	buttonsSizer->Add(newd wxButton(this, wxID_CLEAR, "Clear"), wxSizerFlags(0).Center());
-	sizer->Add(buttonsSizer, wxSizerFlags(0).Center().DoubleBorder());
+	// Create a static box for sorting controls
+	wxStaticBoxSizer* sortBoxSizer = newd wxStaticBoxSizer(wxHORIZONTAL, this, "Sort By");
+	sortBoxSizer->Add(newd wxButton(this, SEARCH_RESULT_SORT_NUMERICAL, "ID"), wxSizerFlags(0).Center().Border(wxRIGHT, 5));
+	sortBoxSizer->Add(newd wxButton(this, SEARCH_RESULT_SORT_ALPHABETICAL, "Name"), wxSizerFlags(0).Center().Border(wxRIGHT, 5));
+	sortBoxSizer->Add(newd wxButton(this, SEARCH_RESULT_SORT_POSITION, "Position"), wxSizerFlags(0).Center());
+	sizer->Add(sortBoxSizer, wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT | wxTOP, 5));
+
+	// Create action buttons sizer
+	wxSizer* actionsSizer = newd wxBoxSizer(wxHORIZONTAL);
+	actionsSizer->Add(newd wxButton(this, SEARCH_RESULT_NEXT_BUTTON, "Next"), wxSizerFlags(0).Center().Border(wxRIGHT, 5));
+	actionsSizer->Add(newd wxButton(this, wxID_FILE, "Export"), wxSizerFlags(0).Center().Border(wxRIGHT, 5));
+	actionsSizer->Add(newd wxButton(this, wxID_CLEAR, "Clear"), wxSizerFlags(0).Center());
+	sizer->Add(actionsSizer, wxSizerFlags(0).Center().DoubleBorder());
 	SetSizerAndFit(sizer);
 }
 
@@ -176,6 +187,130 @@ void SearchResultWindow::OnClickClear(wxCommandEvent& WXUNUSED(event)) {
 
 void SearchResultWindow::OnClickNext(wxCommandEvent& WXUNUSED(event)) {
 	ContinueSearch();
+}
+
+void SearchResultWindow::OnClickSortNumerical(wxCommandEvent& WXUNUSED(event)) {
+	SortResultsByID();
+}
+
+void SearchResultWindow::OnClickSortAlphabetical(wxCommandEvent& WXUNUSED(event)) {
+	SortResultsByName();
+}
+
+void SearchResultWindow::OnClickSortPosition(wxCommandEvent& WXUNUSED(event)) {
+	SortResultsByPosition();
+}
+
+void SearchResultWindow::SortResultsByID() {
+	if (result_list->GetCount() == 0) return;
+	
+	// Create vector of items with their data
+	std::vector<std::pair<wxString, Position*>> items;
+	for (uint32_t i = 0; i < result_list->GetCount(); ++i) {
+		wxString text = result_list->GetString(i);
+		Position* pos = reinterpret_cast<Position*>(result_list->GetClientData(i));
+		items.push_back(std::make_pair(text, pos));
+	}
+	
+	// Sort by ID (extract ID from string)
+	std::sort(items.begin(), items.end(), [](const std::pair<wxString, Position*>& a, const std::pair<wxString, Position*>& b) {
+		// Extract ID from "[ID: xxx]" pattern
+		int idA = 0, idB = 0;
+		size_t startA = a.first.Find("[ID: ");
+		size_t startB = b.first.Find("[ID: ");
+		
+		if (startA != wxString::npos) {
+			startA += 5; // Skip "[ID: "
+			size_t endA = a.first.find(']', startA);
+			if (endA != wxString::npos) {
+				wxString idStrA = a.first.SubString(startA, endA - 1);
+				long tempA;
+				if (idStrA.ToLong(&tempA)) idA = tempA;
+			}
+		}
+		
+		if (startB != wxString::npos) {
+			startB += 5; // Skip "[ID: "
+			size_t endB = b.first.find(']', startB);
+			if (endB != wxString::npos) {
+				wxString idStrB = b.first.SubString(startB, endB - 1);
+				long tempB;
+				if (idStrB.ToLong(&tempB)) idB = tempB;
+			}
+		}
+		
+		return idA < idB;
+	});
+	
+	// Rebuild the list
+	result_list->Clear();
+	for (const auto& item : items) {
+		result_list->Append(item.first, item.second);
+	}
+}
+
+void SearchResultWindow::SortResultsByName() {
+	if (result_list->GetCount() == 0) return;
+	
+	// Create vector of items with their data
+	std::vector<std::pair<wxString, Position*>> items;
+	for (uint32_t i = 0; i < result_list->GetCount(); ++i) {
+		wxString text = result_list->GetString(i);
+		Position* pos = reinterpret_cast<Position*>(result_list->GetClientData(i));
+		items.push_back(std::make_pair(text, pos));
+	}
+	
+	// Sort by name (extract name before "[ID:")
+	std::sort(items.begin(), items.end(), [](const std::pair<wxString, Position*>& a, const std::pair<wxString, Position*>& b) {
+		// Extract name part (everything before " [ID:")
+		wxString nameA = a.first;
+		wxString nameB = b.first;
+		
+		size_t posA = nameA.Find(" [ID:");
+		if (posA != wxString::npos) {
+			nameA = nameA.Left(posA);
+		}
+		
+		size_t posB = nameB.Find(" [ID:");
+		if (posB != wxString::npos) {
+			nameB = nameB.Left(posB);
+		}
+		
+		return nameA.CmpNoCase(nameB) < 0;
+	});
+	
+	// Rebuild the list
+	result_list->Clear();
+	for (const auto& item : items) {
+		result_list->Append(item.first, item.second);
+	}
+}
+
+void SearchResultWindow::SortResultsByPosition() {
+	if (result_list->GetCount() == 0) return;
+	
+	// Create vector of items with their data
+	std::vector<std::pair<wxString, Position*>> items;
+	for (uint32_t i = 0; i < result_list->GetCount(); ++i) {
+		wxString text = result_list->GetString(i);
+		Position* pos = reinterpret_cast<Position*>(result_list->GetClientData(i));
+		items.push_back(std::make_pair(text, pos));
+	}
+	
+	// Sort by position (z first, then y, then x)
+	std::sort(items.begin(), items.end(), [](const std::pair<wxString, Position*>& a, const std::pair<wxString, Position*>& b) {
+		if (!a.second || !b.second) return false;
+		
+		if (a.second->z != b.second->z) return a.second->z < b.second->z;
+		if (a.second->y != b.second->y) return a.second->y < b.second->y;
+		return a.second->x < b.second->x;
+	});
+	
+	// Rebuild the list
+	result_list->Clear();
+	for (const auto& item : items) {
+		result_list->Append(item.first, item.second);
+	}
 }
 
 void SearchResultWindow::ContinueSearch() {

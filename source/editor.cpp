@@ -41,6 +41,7 @@
 #include "live_action.h"
 #include "minimap_window.h"
 #include "borderize_window.h"
+#include "wallize_window.h"
 
 Editor::Editor(CopyBuffer& copybuffer) :
 	live_server(nullptr),
@@ -851,6 +852,37 @@ void Editor::borderizeMap(bool showdialog) {
 	window->Destroy();
 }
 
+void Editor::wallizeSelection() {
+	if (selection.size() == 0) {
+		g_gui.SetStatusText("No items selected. Can't wallize.");
+		return;
+	}
+
+	// Create a custom wallize window similar to BorderizeWindow
+	WallizeWindow* window = newd WallizeWindow(g_gui.root, *this);
+	window->Start();
+	window->Destroy();
+}
+
+void Editor::wallizeMap(bool showdialog) {
+	if (!showdialog) {
+		// Old immediate processing for automated calls
+		uint64_t tiles_done = 0;
+		for (TileLocation* tileLocation : map) {
+			Tile* tile = tileLocation->get();
+			ASSERT(tile);
+			tile->wallize(&map);
+			++tiles_done;
+		}
+		return;
+	}
+
+	// Create a custom wallize window similar to BorderizeWindow
+	WallizeWindow* window = newd WallizeWindow(g_gui.root, *this);
+	window->Start();
+	window->Destroy();
+}
+
 void Editor::randomizeSelection() {
 	if (selection.size() == 0) {
 		g_gui.SetStatusText("No items selected. Can't randomize.");
@@ -996,6 +1028,12 @@ void Editor::clearModifiedTileState(bool showdialog) {
 }
 
 void Editor::moveSelection(Position offset) {
+	// Add debugging output for move selection operation
+	char debug_msg[512];
+	sprintf(debug_msg, "DEBUG DRAG: moveSelection called with offset=(%d,%d,%d), selection_size=%zu\n", 
+		offset.x, offset.y, offset.z, selection.size());
+	OutputDebugStringA(debug_msg);
+	
 	BatchAction* batchAction = actionQueue->createBatch(ACTION_MOVE); // Our saved action batch, for undo!
 	Action* action;
 
@@ -1046,8 +1084,27 @@ void Editor::moveSelection(Position offset) {
 			new_src_tile->clearZoneId();
 			doborders = true;
 		}
+		
+		// Clear zone flags from source tile to prevent empty tiles with zone data
+		// (which causes division by zero crashes in drawing code)
+		if (!tmp_storage_tile->ground && (new_src_tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+			char debug_msg[256];
+			sprintf(debug_msg, "DEBUG DRAG: Clearing zones from empty source tile at (%d,%d,%d) - zones=%zu\n", 
+				new_src_tile->getPosition().x, new_src_tile->getPosition().y, new_src_tile->getPosition().z,
+				new_src_tile->getZoneIds().size());
+			OutputDebugStringA(debug_msg);
+			
+			// If we're not moving ground but the tile has zones, clear them to avoid crashes
+			new_src_tile->unsetMapFlags(TILESTATE_ZONE_BRUSH);
+			new_src_tile->clearZoneId();
+		}
+		
+		// ENHANCED FIX: Validate both tiles to prevent division by zero issues
+		tmp_storage_tile->validateZoneConsistency();
+		new_src_tile->validateZoneConsistency();
 
 		tmp_storage.insert(tmp_storage_tile);
+
 		// Add the tile copy to the action
 		action->addChange(newd Change(new_src_tile));
 	}
@@ -1056,11 +1113,20 @@ void Editor::moveSelection(Position offset) {
 
 	// Remove old borders (and create some newd?)
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_DRAG) && selection.size() < size_t(g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD))) {
+		sprintf(debug_msg, "DEBUG DRAG: Applying autoborder on drag - USE_AUTOMAGIC=%d, BORDERIZE_DRAG=%d, selection_size=%zu, threshold=%d\n", 
+			g_settings.getInteger(Config::USE_AUTOMAGIC), g_settings.getInteger(Config::BORDERIZE_DRAG), 
+			selection.size(), g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD));
+		OutputDebugStringA(debug_msg);
+		
 		action = actionQueue->createAction(batchAction);
 		TileList borderize_tiles;
 		// Go through all modified (selected) tiles (might be slow)
 		for (TileSet::iterator it = tmp_storage.begin(); it != tmp_storage.end(); ++it) {
 			Position pos = (*it)->getPosition();
+			
+			sprintf(debug_msg, "DEBUG DRAG: Processing tmp_storage tile at pos=(%d,%d,%d)\n", pos.x, pos.y, pos.z);
+			OutputDebugStringA(debug_msg);
+			
 			// Go through all neighbours
 			Tile* t;
 			t = map.getTile(pos.x, pos.y, pos.z);
@@ -1103,20 +1169,34 @@ void Editor::moveSelection(Position offset) {
 		// Remove duplicates
 		borderize_tiles.sort();
 		borderize_tiles.unique();
+		
+		sprintf(debug_msg, "DEBUG DRAG: Found %zu borderize tiles\n", borderize_tiles.size());
+		OutputDebugStringA(debug_msg);
+		
 		// Do le borders!
-		for (TileList::iterator it = borderize_tiles.begin(); it != borderize_tiles.end(); ++it) {
+		for (TileList::iterator it = borderize_tiles.begin(); it != borderize_tiles.end(); it++) {
 			Tile* tile = *it;
-			Tile* new_tile = (*it)->deepCopy(map);
-			if (doborders) {
-				new_tile->borderize(&map);
+			if (tile->ground) {
+				if (tile->ground->getGroundBrush()) {
+					Tile* new_tile = tile->deepCopy(map);
+
+					if (doborders) {
+						sprintf(debug_msg, "DEBUG DRAG: Calling borderize on tile at pos=(%d,%d,%d)\n", 
+							tile->getPosition().x, tile->getPosition().y, tile->getPosition().z);
+						OutputDebugStringA(debug_msg);
+						new_tile->borderize(&map);
+					}
+
+					new_tile->wallize(&map);
+					new_tile->tableize(&map);
+					new_tile->carpetize(&map);
+					if (tile->ground->isSelected()) {
+						new_tile->selectGround();
+					}
+
+					action->addChange(newd Change(new_tile));
+				}
 			}
-			new_tile->wallize(&map);
-			new_tile->tableize(&map);
-			new_tile->carpetize(&map);
-			if (tile->ground && tile->ground->isSelected()) {
-				new_tile->selectGround();
-			}
-			action->addChange(newd Change(new_tile));
 		}
 		// Commit changes to map
 		batchAction->addAndCommitAction(action);
@@ -1252,6 +1332,9 @@ void Editor::moveSelection(Position offset) {
 	// Store the action for undo
 	addBatch(batchAction);
 	selection.updateSelectionCount();
+	
+	sprintf(debug_msg, "DEBUG DRAG: editor.moveSelection completed successfully\n");
+	OutputDebugStringA(debug_msg);
 }
 
 void Editor::destroySelection() {

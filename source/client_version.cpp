@@ -486,6 +486,81 @@ bool ClientVersion::hasValidPaths() {
 }
 
 bool ClientVersion::loadValidPaths() {
+	// Try to automatically find the path before asking the user
+	if (!hasValidPaths()) {
+		// Get data directory paths
+		wxString dataDir = g_gui.GetDataDirectory();
+		if (!wxFileName(dataDir).DirExists()) {
+			dataDir = g_gui.getFoundDataDirectory();
+		}
+		
+		// Convert version string to potential directory format
+		std::string versionStr = name;
+		
+		// Try different potential directory formats
+		std::vector<wxString> potentialPaths;
+		
+		// Try original version string (e.g., "10.98")
+		potentialPaths.push_back(dataDir + wxFileName::GetPathSeparator() + wxString(versionStr));
+		
+		// Remove dots (e.g., "1098")
+		std::string noDots = versionStr;
+		noDots.erase(std::remove(noDots.begin(), noDots.end(), '.'), noDots.end());
+		potentialPaths.push_back(dataDir + wxFileName::GetPathSeparator() + wxString(noDots));
+		
+		// Special case for 2-digit versions (add 0)
+		if (noDots.length() == 2) {
+			potentialPaths.push_back(dataDir + wxFileName::GetPathSeparator() + wxString(noDots + "0"));
+		}
+		
+		// Special case for 10.10 -> 10100
+		if (versionStr == "10.10") {
+			potentialPaths.push_back(dataDir + wxFileName::GetPathSeparator() + "10100");
+		}
+		
+		// Special case for other versions with specific directory names
+		std::map<std::string, std::string> specialCases = {
+			{"7.4", "740"},
+			{"7.6", "760"},
+			{"7.7", "770"},
+			{"8.0", "800"},
+			{"8.1", "810"},
+			{"8.6", "860"},
+			{"9.6", "960"},
+			{"10.50", "1050"},
+			{"10.57", "1057"}
+		};
+		
+		if (specialCases.find(versionStr) != specialCases.end()) {
+			potentialPaths.push_back(dataDir + wxFileName::GetPathSeparator() + wxString(specialCases[versionStr]));
+		}
+		
+		// Try all potential paths
+		for (const wxString& path : potentialPaths) {
+			// Try with exact path
+			client_path.Assign(path + wxFileName::GetPathSeparator());
+			if (hasValidPaths()) {
+				ClientVersion::saveVersions();
+				return true;
+			}
+			
+			// Also try with /assets/ subfolder which is common in newer clients
+			wxString assetsPath = path + wxFileName::GetPathSeparator() + "assets" + wxFileName::GetPathSeparator();
+			if (wxDir::Exists(assetsPath)) {
+				client_path.Assign(assetsPath);
+				if (hasValidPaths()) {
+					ClientVersion::saveVersions();
+					return true;
+				}
+			}
+		}
+	} else {
+		// Already has valid paths
+		return true;
+	}
+
+	// If we get here, we couldn't find valid paths automatically
+	// Now prompt the user as before
 	while (!hasValidPaths()) {
 		wxString message = "Could not locate metadata and/or sprite files, please navigate to your client assets %s installation folder.\n";
 		message << "Attempted metadata file: %s\n";

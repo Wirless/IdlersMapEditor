@@ -112,13 +112,6 @@ Action::Action(Editor& editor, ActionIdentifier ident) :
 	type(ident) {
 }
 
-Action::~Action() {
-	ChangeList::const_reverse_iterator it = changes.rbegin();
-	while (it != changes.rend()) {
-		delete *it;
-		++it;
-	}
-}
 
 size_t Action::approx_memsize() const {
 	uint32_t mem = sizeof(*this);
@@ -429,10 +422,40 @@ BatchAction::BatchAction(Editor& editor, ActionIdentifier ident) :
 }
 
 BatchAction::~BatchAction() {
-	for (Action* action : batch) {
-		delete action;
+	try {
+		// Make a copy of the batch to avoid modifying while iterating
+		ActionVector batchCopy;
+		batchCopy.swap(batch); // Swap is safer than copying
+		
+		// Now safely delete each action in the copy
+		for (ActionVector::iterator it = batchCopy.begin(); it != batchCopy.end(); ++it) {
+			try {
+				Action* action = *it;
+				if (action) {
+					delete action;
+				}
+			} catch (const std::exception& e) {
+				// Log error but continue cleanup
+				std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+				if (logFile.is_open()) {
+					wxDateTime now = wxDateTime::Now();
+					logFile << now.FormatISOCombined() << ": Error in BatchAction destructor: " << e.what() << "\n";
+					logFile.close();
+				}
+			}
+		}
+		
+		// Ensure batch is empty (should already be from the swap)
+		batch.clear();
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Critical error in BatchAction destructor: " << e.what() << "\n";
+			logFile.close();
+		}
 	}
-	batch.clear();
 }
 
 size_t BatchAction::memsize(bool recalc) const {
@@ -458,22 +481,46 @@ size_t BatchAction::memsize(bool recalc) const {
 }
 
 void BatchAction::addAction(Action* action) {
-	// If empty, do nothing.
-	if (action->size() == 0) {
-		delete action;
-		return;
+	try {
+		// Safety check for null action
+		if (!action) {
+			return;
+		}
+		
+		// If empty, do nothing.
+		if (action->size() == 0) {
+			delete action;
+			return;
+		}
+
+		ASSERT(action->getType() == type);
+
+		if (!editor.CanEdit()) {
+			delete action;
+			return;
+		}
+
+		// Add it!
+		batch.push_back(action);
+		timestamp = time(nullptr);
 	}
-
-	ASSERT(action->getType() == type);
-
-	if (!editor.CanEdit()) {
-		delete action;
-		return;
+	catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Error in BatchAction::addAction: " << e.what() << "\n";
+			logFile.close();
+		}
+		
+		// Try to clean up action if possible
+		try {
+			delete action;
+		}
+		catch (...) {
+			// Ignore cleanup errors
+		}
 	}
-
-	// Add it!
-	batch.push_back(action);
-	timestamp = time(nullptr);
 }
 
 void BatchAction::addAndCommitAction(Action* action) {
@@ -515,8 +562,35 @@ void BatchAction::redo() {
 }
 
 void BatchAction::merge(BatchAction* other) {
-	batch.insert(batch.end(), other->batch.begin(), other->batch.end());
-	other->batch.clear();
+	try {
+		// Safety check for null pointer
+		if (!other) {
+			return;
+		}
+		
+		// Reserve space to avoid multiple reallocations
+		batch.reserve(batch.size() + other->batch.size());
+		
+		// Move actions from other batch to this one
+		for (ActionVector::iterator it = other->batch.begin(); it != other->batch.end(); /* no increment here */) {
+			Action* action = *it;
+			it = other->batch.erase(it); // Remove from source vector before adding to destination
+			if (action) {
+				batch.push_back(action);
+			}
+		}
+		
+		// Clear the other batch's vector (should already be empty)
+		other->batch.clear();
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Error merging batch actions: " << e.what() << "\n";
+			logFile.close();
+		}
+	}
 }
 
 ActionQueue::ActionQueue(Editor& editor) :
@@ -525,9 +599,32 @@ ActionQueue::ActionQueue(Editor& editor) :
 }
 
 ActionQueue::~ActionQueue() {
-	for (auto it = actions.begin(); it != actions.end(); /* no increment here */) {
-		delete *it;
-		it = actions.erase(it); // erase returns the next valid iterator
+	try {
+		for (auto it = actions.begin(); it != actions.end(); /* no increment here */) {
+			BatchAction* action = *it;
+			it = actions.erase(it); // Remove from container before deleting
+			
+			try {
+				delete action;
+			} catch (const std::exception& e) {
+				// Log error but continue cleanup
+				std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+				if (logFile.is_open()) {
+					wxDateTime now = wxDateTime::Now();
+					logFile << now.FormatISOCombined() << ": Error deleting action in queue destructor: " << e.what() << "\n";
+					logFile.close();
+				}
+			}
+		}
+		actions.clear(); // Ensure container is empty
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Error in ActionQueue destructor: " << e.what() << "\n";
+			logFile.close();
+		}
 	}
 }
 
@@ -552,20 +649,74 @@ void ActionQueue::resetTimer() {
 void ActionQueue::addAction(Action* action, int stacking_delay) {
 	// Ensure we're on the main thread
 	if (!wxThread::IsMain()) {
-		wxTheApp->CallAfter([=]() {
-			this->addAction(action, stacking_delay);
+		// Use CallAfter with a copy of parameters to prevent race conditions
+		Action* actionPtr = action;
+		int delay = stacking_delay;
+		wxTheApp->CallAfter([this, actionPtr, delay]() {
+			this->addAction(actionPtr, delay);
 		});
 		return;
 	}
 
-	BatchAction* batch = createBatch(action->getType());
-	batch->addAndCommitAction(action);
-	if (batch->size() == 0) {
-		delete batch;
+	// Safety check for null action
+	if (!action) {
 		return;
 	}
 
-	addBatch(batch, stacking_delay);
+	try {
+		// If empty, do nothing.
+		if (action->size() == 0) {
+			delete action;
+			return;
+		}
+
+		BatchAction* batch = createBatch(action->getType());
+		if (!batch) {
+			delete action;
+			return;
+		}
+
+		try {
+			batch->addAndCommitAction(action);
+			
+			// If batch is empty after adding action, clean up and return
+			if (batch->size() == 0) {
+				delete batch;
+				return;
+			}
+
+			addBatch(batch, stacking_delay);
+		}
+		catch (const std::exception& e) {
+			// Log error but don't crash
+			std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+			if (logFile.is_open()) {
+				wxDateTime now = wxDateTime::Now();
+				logFile << now.FormatISOCombined() << ": Error in addAction: " << e.what() << "\n";
+				logFile.close();
+			}
+			
+			// Clean up if exception occurred
+			delete batch;
+		}
+	}
+	catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Critical error in addAction: " << e.what() << "\n";
+			logFile.close();
+		}
+		
+		// Try to clean up action if possible
+		try {
+			delete action;
+		}
+		catch (...) {
+			// Ignore cleanup errors
+		}
+	}
 }
 
 void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
@@ -610,18 +761,59 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 			}
 		}
 
+		// Special handling for remote actions
 		if (batch->type == ACTION_REMOTE) {
-			delete batch;
+			try {
+				// For remote actions, we need to be extra careful
+				// First clear the batch to ensure no dangling pointers
+				ActionVector batchCopy;
+				
+				// Swap the batch contents to avoid issues during deletion
+				batchCopy.swap(batch->batch);
+				
+				// Now safely delete the batch (which should be empty)
+				delete batch;
+				
+				// Then safely delete each action in the copy
+				for (Action* action : batchCopy) {
+					try {
+						if (action) {
+							delete action;
+						}
+					} catch (const std::exception& e) {
+						// Log error but continue cleanup
+						std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+						if (logFile.is_open()) {
+							wxDateTime now = wxDateTime::Now();
+							logFile << now.FormatISOCombined() << ": Error deleting remote action: " << e.what() << "\n";
+							logFile.close();
+						}
+					}
+				}
+			} catch (const std::exception& e) {
+				// Log error but don't crash
+				std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+				if (logFile.is_open()) {
+					wxDateTime now = wxDateTime::Now();
+					logFile << now.FormatISOCombined() << ": Error handling remote batch: " << e.what() << "\n";
+					logFile.close();
+				}
+			}
 			return;
 		}
 
-		// Protect against memory corruption
-		while (current < actions.size() && !actions.empty()) {
+		// Protect against memory corruption when clearing redo history
+		while (current < actions.size()) {
 			try {
-				memory_size -= actions.back()->memsize();
+				if (actions.empty()) break;
+				
 				BatchAction* todelete = actions.back();
-				actions.pop_back();
-				delete todelete;
+				actions.pop_back(); // Remove from container before deleting to avoid invalid references
+				
+				if (todelete) {
+					memory_size -= todelete->memsize();
+					delete todelete;
+				}
 			} catch (const std::exception& e) {
 				// Log error but continue processing
 				std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
@@ -630,49 +822,71 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 					logFile << now.FormatISOCombined() << ": Error clearing action: " << e.what() << "\n";
 					logFile.close();
 				}
-				break;
 			}
 		}
 
-		// Safely manage memory
+		// Safely manage memory for undo size limits
 		try {
+			// Limit by memory size
 			while (memory_size > size_t(1024 * 1024 * g_settings.getInteger(Config::UNDO_MEM_SIZE)) && !actions.empty()) {
-				memory_size -= actions.front()->memsize();
-				delete actions.front();
-				actions.pop_front();
+				BatchAction* todelete = actions.front();
+				actions.pop_front(); // Remove from container before accessing or deleting
+				
+				if (todelete) {
+					memory_size -= todelete->memsize();
+					delete todelete;
+				}
+				
 				if (current > 0) {
 					current--;
 				}
 			}
 
-			if (actions.size() > size_t(g_settings.getInteger(Config::UNDO_SIZE)) && !actions.empty()) {
-				memory_size -= actions.front()->memsize();
+			// Limit by action count
+			while (actions.size() > size_t(g_settings.getInteger(Config::UNDO_SIZE)) && !actions.empty()) {
 				BatchAction* todelete = actions.front();
-				actions.pop_front();
-				delete todelete;
+				actions.pop_front(); // Remove from container before accessing or deleting
+				
+				if (todelete) {
+					memory_size -= todelete->memsize();
+					delete todelete;
+				}
+				
 				if (current > 0) {
 					current--;
 				}
 			}
 
 			// Process action with additional safety
-			do {
-				if (!actions.empty()) {
-					BatchAction* lastAction = actions.back();
-					if (lastAction->type == batch->type && g_settings.getInteger(Config::GROUP_ACTIONS) && time(nullptr) - stacking_delay < lastAction->timestamp) {
-						lastAction->merge(batch);
-						lastAction->timestamp = time(nullptr);
-						memory_size -= lastAction->memsize();
-						memory_size += lastAction->memsize(true);
-						delete batch;
-						break;
-					}
+			bool actionMerged = false;
+			if (!actions.empty()) {
+				BatchAction* lastAction = actions.back();
+				if (lastAction && batch && 
+					lastAction->type == batch->type && 
+					g_settings.getInteger(Config::GROUP_ACTIONS) && 
+					time(nullptr) - stacking_delay < lastAction->timestamp) {
+					
+					// Save current memory size before merge
+					memory_size -= lastAction->memsize();
+					
+					// Perform the merge
+					lastAction->merge(batch);
+					lastAction->timestamp = time(nullptr);
+					
+					// Update memory size after merge
+					memory_size += lastAction->memsize(true);
+					delete batch;
+					actionMerged = true;
 				}
+			}
+			
+			// Add as new action if not merged
+			if (!actionMerged) {
 				memory_size += batch->memsize();
 				actions.push_back(batch);
 				batch->timestamp = time(nullptr);
 				current++;
-			} while (false);
+			}
 		} catch (const std::exception& e) {
 			// Log error but don't crash
 			std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
@@ -680,6 +894,11 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 				wxDateTime now = wxDateTime::Now();
 				logFile << now.FormatISOCombined() << ": Error processing batch: " << e.what() << "\n";
 				logFile.close();
+			}
+			
+			// If we caught an exception and haven't added or deleted the batch yet, delete it now
+			if (batch) {
+				delete batch;
 			}
 		}
 	} catch (const std::exception& e) {
@@ -690,31 +909,94 @@ void ActionQueue::addBatch(BatchAction* batch, int stacking_delay) {
 			logFile << now.FormatISOCombined() << ": Critical error in addBatch: " << e.what() << "\n";
 			logFile.close();
 		}
+		
+		// Clean up batch if we haven't processed it yet
+		if (batch) {
+			delete batch;
+		}
 	}
 }
 
 void ActionQueue::undo() {
-	if (current > 0) {
-		current--;
-		BatchAction* batch = actions[current];
-		batch->undo();
+	try {
+		if (current > 0 && current <= actions.size()) {
+			current--;
+			BatchAction* batch = actions[current];
+			if (batch) {
+				batch->undo();
+			}
+		}
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Error in undo(): " << e.what() << "\n";
+			logFile.close();
+		}
 	}
 }
 
 void ActionQueue::redo() {
-	if (current < actions.size()) {
-		BatchAction* batch = actions[current];
-		batch->redo();
-		current++;
+	try {
+		if (current < actions.size()) {
+			BatchAction* batch = actions[current];
+			if (batch) {
+				batch->redo();
+			}
+			current++;
+		}
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Error in redo(): " << e.what() << "\n";
+			logFile.close();
+		}
 	}
 }
 
 void ActionQueue::clear() {
-	for (ActionList::iterator it = actions.begin(); it != actions.end();) {
-		delete *it;
-		it = actions.erase(it);
+	try {
+		// Make a copy of the actions to avoid modifying the container while iterating
+		ActionList actionsCopy = actions;
+		
+		// Clear the original container first to prevent double deletions
+		actions.clear();
+		current = 0;
+		memory_size = 0;
+		
+		// Now safely delete each action
+		for (BatchAction* action : actionsCopy) {
+			try {
+				if (action) {
+					delete action;
+				}
+			} catch (const std::exception& e) {
+				// Log error but continue cleanup
+				std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+				if (logFile.is_open()) {
+					wxDateTime now = wxDateTime::Now();
+					logFile << now.FormatISOCombined() << ": Error in clear() deleting action: " << e.what() << "\n";
+					logFile.close();
+				}
+			}
+		}
+	} catch (const std::exception& e) {
+		// Log error but don't crash
+		std::ofstream logFile((wxStandardPaths::Get().GetUserDataDir() + wxFileName::GetPathSeparator() + "action_error.log").ToStdString(), std::ios::app);
+		if (logFile.is_open()) {
+			wxDateTime now = wxDateTime::Now();
+			logFile << now.FormatISOCombined() << ": Critical error in clear(): " << e.what() << "\n";
+			logFile.close();
+		}
+		
+		// Reset state as much as possible
+		actions.clear();
+		current = 0;
+		memory_size = 0;
 	}
-	current = 0;
 }
 
 DirtyList::DirtyList() :

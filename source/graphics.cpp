@@ -519,7 +519,8 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 
 	uint32_t minID = 100; // items start with id 100
 	// We don't load distance/effects, if we would, just add effect_count & distance_count here
-	uint32_t maxID = item_count + creature_count;
+	//we load effects now
+	uint32_t maxID = item_count + creature_count + effect_count + distance_count;
 
 	dat_format = client_version->getDatFormatForSignature(datSignature);
 
@@ -1188,63 +1189,73 @@ void GameSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int w
 }
 
 void GameSprite::DrawOutfit(wxDC* dc, SpriteSize sz, int start_x, int start_y, const Outfit& outfit) {
-	// This implementation is similar to DrawTo but will use templated images when available
-	
-	// First, check if this GameSprite supports outfit coloring
-	// If not, just use the regular DrawTo method
-	if (!layers || !frames || !pattern_x || !pattern_y || !pattern_z) {
+	// Check if this GameSprite supports outfit coloring
+	if (layers <= 1) {
+		// No template support, fall back to regular drawing
 		DrawTo(dc, sz, start_x, start_y);
 		return;
 	}
 	
-	// Get the first directional pose of this creature (south direction)
-	int sprite_index = getIndex(width, height, 0, 0, 0, 0, 0);
+	// For outfit sprites, we need to check if there are any colors to apply
+	bool hasOutfitColors = (outfit.lookHead > 0 || outfit.lookBody > 0 || 
+						   outfit.lookLegs > 0 || outfit.lookFeet > 0);
 	
-	// Try to get a templated image for this outfit
-	TemplateImage* img = nullptr;
-	if (outfit.lookType > 0 && (outfit.lookHead > 0 || outfit.lookBody > 0 || 
-							 outfit.lookLegs > 0 || outfit.lookFeet > 0)) {
-		// Attempt to find or create a template image with these colors
-		img = getTemplateImage(sprite_index, outfit);
-	}
-	
-	if (img) {
-		// If we have a templated image with outfit colors, use it
-		if (sz == SPRITE_SIZE_64x64) {
-			// For 64x64, use the 32x32 DC and scale it
-			wxDC* sdc = getDC(SPRITE_SIZE_32x32);
-			if (sdc) {
-				wxBitmap bmp(32, 32);
-				wxMemoryDC temp_dc(bmp);
-				temp_dc.Blit(0, 0, 32, 32, sdc, 0, 0, wxCOPY, true);
-				temp_dc.SelectObject(wxNullBitmap);
-				
-				wxImage img = bmp.ConvertToImage();
-				img.Rescale(64, 64, wxIMAGE_QUALITY_HIGH);
-				wxBitmap scaled(img);
-				
-				dc->DrawBitmap(scaled, start_x, start_y, true);
-			} else {
-				// Fallback to regular drawing
-				DrawTo(dc, sz, start_x, start_y);
-			}
-		} else {
-			// Regular 16x16 or 32x32 rendering
-			wxDC* sdc = getDC(sz);
-			if (sdc) {
-				dc->Blit(start_x, start_y, 
-						(sz == SPRITE_SIZE_32x32 ? 32 : 16), 
-						(sz == SPRITE_SIZE_32x32 ? 32 : 16), 
-						sdc, 0, 0, wxCOPY, true);
-			} else {
-				// Fallback to regular drawing
-				DrawTo(dc, sz, start_x, start_y);
-			}
-		}
-	} else {
-		// Fallback to regular drawing if no template is available
+	if (!hasOutfitColors) {
+		// No outfit colors, use regular drawing
 		DrawTo(dc, sz, start_x, start_y);
+		return;
 	}
+	
+	// Create a templated image with the outfit colors
+	int sprite_index = getIndex(0, 0, 0, 0, 0, 0, 0); // Get base sprite index
+	TemplateImage* templateImg = getTemplateImage(sprite_index, outfit);
+	
+	if (!templateImg) {
+		// Fallback to regular drawing
+		DrawTo(dc, sz, start_x, start_y);
+		return;
+	}
+	
+	// Get the RGB data from the templated image (with outfit colors applied)
+	uint8_t* rgbData = templateImg->getRGBData();
+	if (!rgbData) {
+		// Fallback to regular drawing
+		DrawTo(dc, sz, start_x, start_y);
+		return;
+	}
+	
+	// Create wxImage from the RGB data
+	wxImage image(SPRITE_PIXELS, SPRITE_PIXELS, rgbData, true); // true = static data, don't copy
+	
+	// Set magenta as transparent color
+	image.SetMaskColour(255, 0, 255);
+	
+	// Calculate target size based on the SpriteSize parameter
+	int target_size;
+	switch (sz) {
+		case SPRITE_SIZE_16x16:
+			target_size = 16;
+			break;
+		case SPRITE_SIZE_64x64:
+			target_size = 64;
+			break;
+		case SPRITE_SIZE_32x32:
+		default:
+			target_size = 32;
+			break;
+	}
+	
+	// Scale the image if needed
+	if (target_size != SPRITE_PIXELS) {
+		image = image.Scale(target_size, target_size, wxIMAGE_QUALITY_HIGH);
+	}
+	
+	// Convert to bitmap and draw
+	wxBitmap bitmap(image);
+	dc->DrawBitmap(bitmap, start_x, start_y, true);
+	
+	// Clean up the RGB data
+	delete[] rgbData;
 }
 
 GameSprite::Image::Image() :

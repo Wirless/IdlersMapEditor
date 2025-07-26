@@ -112,6 +112,9 @@ enum ActionIdentifier {
 	ACTION_PASTE_TILES,
 	ACTION_RANDOMIZE,
 	ACTION_BORDERIZE,
+	ACTION_WALLIZE,
+	ACTION_WALLIZE_SELECTION,
+	ACTION_WALLIZE_MAP,
 	ACTION_DRAW,
 	ACTION_SWITCHDOOR,
 	ACTION_ROTATE_ITEM,
@@ -157,7 +160,7 @@ protected:
 	friend class ActionQueue;
 };
 
-typedef std::vector<Action*> ActionVector;
+using ActionVector = std::vector<Action*>;
 
 class BatchAction {
 public:

@@ -31,6 +31,7 @@
 #include "copybuffer.h"
 #include "live_socket.h"
 #include "graphics.h"
+#include "settings.h"
 
 #include "doodad_brush.h"
 #include "creature_brush.h"
@@ -43,6 +44,140 @@
 #include "table_brush.h"
 #include "waypoint_brush.h"
 #include "light_drawer.h"
+#include "string_utils.h" // For parseIdRangesString, isIdInRanges
+
+// InvisibleItemsColorManager static members
+bool InvisibleItemsColorManager::custom_colors_enabled = false;
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::invalid_color(255, 0, 0);
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::stairs_color(255, 255, 0);
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::walkable_color(255, 0, 0);
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::wall_color(0, 255, 255);
+std::unordered_map<uint32_t, InvisibleItemsColorManager::Color> InvisibleItemsColorManager::custom_colors;
+
+void InvisibleItemsColorManager::LoadFromSettings() {
+	custom_colors_enabled = g_settings.getBoolean(Config::INVISIBLE_ITEMS_ENABLE_CUSTOM);
+	
+	invalid_color = Color(
+		g_settings.getInteger(Config::INVISIBLE_INVALID_RED),
+		g_settings.getInteger(Config::INVISIBLE_INVALID_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_INVALID_BLUE)
+	);
+	
+	stairs_color = Color(
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_RED),
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_STAIRS_BLUE)
+	);
+	
+	walkable_color = Color(
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_RED),
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_WALKABLE_BLUE)
+	);
+	
+	wall_color = Color(
+		g_settings.getInteger(Config::INVISIBLE_WALL_RED),
+		g_settings.getInteger(Config::INVISIBLE_WALL_GREEN),
+		g_settings.getInteger(Config::INVISIBLE_WALL_BLUE)
+	);
+	
+	// Parse custom IDs string
+	std::string custom_ids_str = g_settings.getString(Config::INVISIBLE_CUSTOM_IDS);
+	ParseCustomIDs(custom_ids_str);
+}
+
+void InvisibleItemsColorManager::ReloadFromSettings() {
+	LoadFromSettings();
+}
+
+void InvisibleItemsColorManager::ParseCustomIDs(const std::string& custom_ids_str) {
+	custom_colors.clear();
+	
+	if (custom_ids_str.empty()) {
+		return;
+	}
+	
+	// Split by semicolon
+	std::stringstream ss(custom_ids_str);
+	std::string entry;
+	
+	while (std::getline(ss, entry, ';')) {
+		if (entry.empty()) continue;
+		
+		// Find colon separator between ID and color
+		size_t colon_pos = entry.find(':');
+		if (colon_pos == std::string::npos) continue;
+		
+		std::string id_str = entry.substr(0, colon_pos);
+		std::string color_str = entry.substr(colon_pos + 1);
+		
+		// Parse ID
+		uint32_t id;
+		try {
+			id = std::stoul(id_str);
+		} catch (...) {
+			continue; // Invalid ID, skip this entry
+		}
+		
+		// Parse color (R,G,B)
+		std::stringstream color_ss(color_str);
+		std::string component;
+		std::vector<int> rgb_values;
+		
+		while (std::getline(color_ss, component, ',') && rgb_values.size() < 3) {
+			try {
+				int value = std::stoi(component);
+				if (value >= 0 && value <= 255) {
+					rgb_values.push_back(value);
+				} else {
+					break; // Invalid color value
+				}
+			} catch (...) {
+				break; // Invalid color value
+			}
+		}
+		
+		if (rgb_values.size() == 3) {
+			custom_colors[id] = Color(rgb_values[0], rgb_values[1], rgb_values[2]);
+		}
+	}
+}
+
+bool InvisibleItemsColorManager::GetCustomColor(uint32_t clientID, int& red, int& green, int& blue) {
+	if (!custom_colors_enabled) {
+		return false;
+	}
+	
+	auto it = custom_colors.find(clientID);
+	if (it != custom_colors.end()) {
+		red = it->second.red;
+		green = it->second.green;
+		blue = it->second.blue;
+		return true;
+	}
+	
+	return false;
+}
+
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::GetInvalidItemColor() {
+	return custom_colors_enabled ? invalid_color : Color(255, 0, 0);
+}
+
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::GetInvisibleStairsColor() {
+	return custom_colors_enabled ? stairs_color : Color(255, 255, 0);
+}
+
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::GetInvisibleWalkableColor() {
+	return custom_colors_enabled ? walkable_color : Color(255, 0, 0);
+}
+
+InvisibleItemsColorManager::Color InvisibleItemsColorManager::GetInvisibleWallColor() {
+	return custom_colors_enabled ? wall_color : Color(0, 255, 255);
+}
+
+bool InvisibleItemsColorManager::IsCustomColorsEnabled() {
+	return custom_colors_enabled;
+}
 
 using Color = std::tuple<int, int, int>;
 
@@ -77,6 +212,29 @@ void GenerateColors() {
 			break;
 		}
 	}
+}
+
+// Gets a distinctive color for a house based on its ID
+// Returns RGB values in the order: r, g, b
+void getHouseColor(uint32_t houseId, uint8_t& r, uint8_t& g, uint8_t& b) {
+	// Define a sequence of colors to cycle through
+	// Red, Orange, Yellow, Green, Blue, Indigo, Violet
+	static const std::vector<Color> houseColors = {
+		{255, 0, 0},    // Red
+		{255, 127, 0},  // Orange
+		{255, 255, 0},  // Yellow
+		{0, 255, 0},    // Green
+		{0, 0, 255},    // Blue
+		{75, 0, 130},   // Indigo
+		{148, 0, 211}   // Violet
+	};
+	
+	// Cycle through the colors based on house ID
+	const Color& color = houseColors[houseId % houseColors.size()];
+	
+	r = std::get<0>(color);
+	g = std::get<1>(color);
+	b = std::get<2>(color);
 }
 
 DrawingOptions::DrawingOptions() {
@@ -157,6 +315,9 @@ bool DrawingOptions::isDrawLight() const noexcept {
 MapDrawer::MapDrawer(MapCanvas* canvas) :
 	canvas(canvas), editor(canvas->editor) {
 	light_drawer = std::make_shared<LightDrawer>();
+	
+	// Load invisible items color settings
+	InvisibleItemsColorManager::LoadFromSettings();
 }
 
 MapDrawer::~MapDrawer() {
@@ -494,9 +655,14 @@ void MapDrawer::DrawMap() {
 									b16 += std::get<2>(colour);
 								}
 
-								r = r16 / zones;
-								g = g16 / zones;
-								b = b16 / zones;
+								if (zones > 0) {  // Prevent division by zero
+									r = r16 / zones;
+									g = g16 / zones;
+									b = b16 / zones;
+								} else {
+									// Clear invalid zone flag to prevent future crashes
+									const_cast<Tile*>(tile)->unsetMapFlags(TILESTATE_ZONE_BRUSH);
+								}
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
 						}
@@ -535,11 +701,24 @@ void MapDrawer::DrawIngameBox() {
 	int center_x = start_x + int(screensize_x * zoom / 64);
 	int center_y = start_y + int(screensize_y * zoom / 64);
 
-	int offset_y = 2;
-	int box_start_map_x = center_x;
+	// Use custom settings if enabled, otherwise use defaults
+	int box_width, box_height, offset_x, offset_y;
+	if (g_settings.getBoolean(Config::INGAME_BOX_CUSTOM_SIZE_ENABLED)) {
+		box_width = g_settings.getInteger(Config::INGAME_BOX_WIDTH);
+		box_height = g_settings.getInteger(Config::INGAME_BOX_HEIGHT);
+		offset_x = g_settings.getInteger(Config::INGAME_BOX_OFFSET_X);
+		offset_y = g_settings.getInteger(Config::INGAME_BOX_OFFSET_Y);
+	} else {
+		box_width = ClientMapWidth;
+		box_height = ClientMapHeight;
+		offset_x = 0;
+		offset_y = 2;
+	}
+
+	int box_start_map_x = center_x + offset_x;
 	int box_start_map_y = center_y + offset_y;
-	int box_end_map_x = center_x + ClientMapWidth;
-	int box_end_map_y = center_y + ClientMapHeight + offset_y;
+	int box_end_map_x = center_x + box_width + offset_x;
+	int box_end_map_y = center_y + box_height + offset_y;
 
 	int box_start_x = box_start_map_x * TileSize - view_scroll_x;
 	int box_start_y = box_start_map_y * TileSize - view_scroll_y;
@@ -580,9 +759,9 @@ void MapDrawer::DrawIngameBox() {
 	box_end_y -= 1 * TileSize;
 	drawRect(box_start_x, box_start_y, box_end_x - box_start_x, box_end_y - box_start_y, *wxGREEN);
 
-	// player position
-	box_start_x += (ClientMapWidth - 3) / 2 * TileSize;
-	box_start_y += (ClientMapHeight - 3) / 2 * TileSize;
+	// player position (center of the client box)
+	box_start_x += (box_width - 3) / 2 * TileSize;
+	box_start_y += (box_height - 3) / 2 * TileSize;
 	box_end_x = box_start_x + TileSize;
 	box_end_y = box_start_y + TileSize;
 	drawRect(box_start_x, box_start_y, box_end_x - box_start_x, box_end_y - box_start_y, *wxGREEN);
@@ -617,6 +796,12 @@ void MapDrawer::DrawDraggingShadow() {
 
 	// Draw dragging shadow
 	if (!editor.selection.isBusy() && dragging && !options.ingame) {
+		// Add debugging output for dragging shadow drawing
+		char debug_msg[512];
+		sprintf(debug_msg, "DEBUG DRAG: DrawDraggingShadow started - selection_size=%zu, dragging=%d\n", 
+			editor.selection.size(), dragging);
+		OutputDebugStringA(debug_msg);
+		
 		for (TileSet::iterator tit = editor.selection.begin(); tit != editor.selection.end(); tit++) {
 			Tile* tile = *tit;
 			Position pos = tile->getPosition();
@@ -625,12 +810,18 @@ void MapDrawer::DrawDraggingShadow() {
 			move_x = canvas->drag_start_x - mouse_map_x;
 			move_y = canvas->drag_start_y - mouse_map_y;
 			move_z = canvas->drag_start_z - floor;
+			
+			sprintf(debug_msg, "DEBUG DRAG: Processing tile at pos=(%d,%d,%d), move_offset=(%d,%d,%d)\n", 
+				pos.x, pos.y, pos.z, move_x, move_y, move_z);
+			OutputDebugStringA(debug_msg);
 
 			pos.x -= move_x;
 			pos.y -= move_y;
 			pos.z -= move_z;
 
 			if (pos.z < 0 || pos.z >= MAP_LAYERS) {
+				sprintf(debug_msg, "DEBUG DRAG: Skipping tile - invalid z coordinate: %d\n", pos.z);
+				OutputDebugStringA(debug_msg);
 				continue;
 			}
 
@@ -642,12 +833,22 @@ void MapDrawer::DrawDraggingShadow() {
 				} else {
 					offset = TileSize * (floor - pos.z);
 				}
+				
+				sprintf(debug_msg, "DEBUG DRAG: Calculating offset - pos.z=%d, GROUND_LAYER=%d, floor=%d, TileSize=%d, offset=%d\n", 
+					pos.z, GROUND_LAYER, floor, TileSize, offset);
+				OutputDebugStringA(debug_msg);
 
 				int draw_x = ((pos.x * TileSize) - view_scroll_x) - offset;
 				int draw_y = ((pos.y * TileSize) - view_scroll_y) - offset;
+				
+				sprintf(debug_msg, "DEBUG DRAG: Calculated draw position - draw_x=%d, draw_y=%d\n", draw_x, draw_y);
+				OutputDebugStringA(debug_msg);
 
 				// save performance when moving large chunks unzoomed
 				ItemVector toRender = tile->getSelectedItems(zoom > 3.0);
+				sprintf(debug_msg, "DEBUG DRAG: Got %zu items to render for tile\n", toRender.size());
+				OutputDebugStringA(debug_msg);
+				
 				Tile* desttile = editor.map.getTile(pos);
 				for (ItemVector::const_iterator iit = toRender.begin(); iit != toRender.end(); iit++) {
 					if (desttile) {
@@ -660,14 +861,24 @@ void MapDrawer::DrawDraggingShadow() {
 				// save performance when moving large chunks unzoomed
 				if (zoom <= 3.0) {
 					if (tile->creature && tile->creature->isSelected() && options.show_creatures) {
+						sprintf(debug_msg, "DEBUG DRAG: Drawing creature at (%d,%d)\n", draw_x, draw_y);
+						OutputDebugStringA(debug_msg);
 						BlitCreature(draw_x, draw_y, tile->creature);
 					}
 					if (tile->spawn && tile->spawn->isSelected()) {
+						sprintf(debug_msg, "DEBUG DRAG: Drawing spawn at (%d,%d)\n", draw_x, draw_y);
+						OutputDebugStringA(debug_msg);
 						BlitSpriteType(draw_x, draw_y, SPRITE_SPAWN, 160, 160, 160, 160);
 					}
 				}
+			} else {
+				sprintf(debug_msg, "DEBUG DRAG: Tile not on screen or not moving - pos=(%d,%d,%d), bounds=(%d,%d,%d,%d), move=(%d,%d,%d)\n", 
+					pos.x, pos.y, pos.z, start_x, start_y, end_x, end_y, move_x, move_y, move_z);
+				OutputDebugStringA(debug_msg);
 			}
 		}
+		
+		OutputDebugStringA("DEBUG DRAG: DrawDraggingShadow completed\n");
 	}
 
 	glDisable(GL_TEXTURE_2D);
@@ -985,59 +1196,81 @@ void MapDrawer::DrawBrush() {
 					glEnd();
 				}
 			} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
-				// Calculate drawing offsets
-				int start_x, end_x;
-				int start_y, end_y;
-				int width = std::max(
-					std::abs(std::max(mouse_map_y, canvas->last_click_map_y) - std::min(mouse_map_y, canvas->last_click_map_y)),
-					std::abs(std::max(mouse_map_x, canvas->last_click_map_x) - std::min(mouse_map_x, canvas->last_click_map_x))
-				);
-
-				if (mouse_map_x < canvas->last_click_map_x) {
-					start_x = canvas->last_click_map_x - width;
-					end_x = canvas->last_click_map_x;
-				} else {
-					start_x = canvas->last_click_map_x;
-					end_x = canvas->last_click_map_x + width;
-				}
-
-				if (mouse_map_y < canvas->last_click_map_y) {
-					start_y = canvas->last_click_map_y - width;
-					end_y = canvas->last_click_map_y;
-				} else {
-					start_y = canvas->last_click_map_y;
-					end_y = canvas->last_click_map_y + width;
-				}
-
-				int center_x = start_x + (end_x - start_x) / 2;
-				int center_y = start_y + (end_y - start_y) / 2;
-				float radii = width / 2.0f + 0.005f;
+				// Calculate drawing dimensions
+				int width = std::abs(mouse_map_x - canvas->last_click_map_x) + 1;
+				int height = std::abs(mouse_map_y - canvas->last_click_map_y) + 1;
+				int radius = std::max(width, height) / 2;
+				
+				// Calculate center position
+				int center_x = canvas->last_click_map_x;
+				int center_y = canvas->last_click_map_y;
+				
+				// Calculate bounds with 1-tile margin
+				int start_x = center_x - radius - 1;
+				int end_x = center_x + radius + 1;
+				int start_y = center_y - radius - 1;
+				int end_y = center_y + radius + 1;
+				
+				// For even-sized brushes, adjust the center
+				double center_offset_x = (width % 2 == 0) ? 0.5 : 0.0;
+				double center_offset_y = (height % 2 == 0) ? 0.5 : 0.0;
 
 				RAWBrush* raw_brush = nullptr;
 				if (brush->isRaw()) {
 					raw_brush = brush->asRaw();
 				}
 
-				for (int y = start_y - 1; y <= end_y + 1; y++) {
+				for (int y = start_y; y <= end_y; y++) {
 					int cy = y * TileSize - view_scroll_y - getFloorAdjustment(floor);
-					float dy = center_y - y;
-					for (int x = start_x - 1; x <= end_x + 1; x++) {
+					for (int x = start_x; x <= end_x; x++) {
 						int cx = x * TileSize - view_scroll_x - getFloorAdjustment(floor);
 
-						float dx = center_x - x;
-						// printf("%f;%f\n", dx, dy);
-						float distance = sqrt(dx * dx + dy * dy);
-						if (distance < radii) {
+						// Calculate distance from center with offset for even-sized brushes
+						float dx = (center_x + center_offset_x) - x;
+						float dy = (center_y + center_offset_y) - y;
+						
+						// CRITICAL FIX: Prevent division by zero
+						float width_half = width / 2.0f;
+						float height_half = height / 2.0f;
+						
+						if (width_half <= 0.0f || height_half <= 0.0f) {
+							char debug_msg[512];
+							sprintf(debug_msg, "DEBUG DRAG: CRITICAL ERROR! Division by zero prevented in circle calc - width=%d, height=%d, width_half=%f, height_half=%f\n", 
+								width, height, width_half, height_half);
+							OutputDebugStringA(debug_msg);
+							
+							// Force to minimum safe values
+							if (width_half <= 0.0f) width_half = 0.5f;
+							if (height_half <= 0.0f) height_half = 0.5f;
+						}
+						
+						float normalized_x = dx / width_half;
+						float normalized_y = dy / height_half;
+						float distance = sqrt(normalized_x * normalized_x + normalized_y * normalized_y);
+						
+						// If the normalized distance is less than 1.0, the point is inside the ellipse
+						if (distance < 1.0 + 0.005) {
 							if (brush->isRaw()) {
 								DrawRawBrush(cx, cy, raw_brush->getItemType(), 160, 160, 160, 160);
 							} else {
-								glColor(brushColor);
-								glBegin(GL_QUADS);
-								glVertex2f(cx, cy + TileSize);
-								glVertex2f(cx + TileSize, cy + TileSize);
-								glVertex2f(cx + TileSize, cy);
-								glVertex2f(cx, cy);
-								glEnd();
+								if (brush->isWaypoint()) {
+									uint8_t r, g, b;
+									getColor(brush, Position(mouse_map_x + x, mouse_map_y + y, floor), r, g, b);
+									DrawBrushIndicator(cx, cy, brush, r, g, b);
+								} else {
+									if (brush->isHouseExit() || brush->isOptionalBorder()) {
+										glColorCheck(brush, Position(mouse_map_x + x, mouse_map_y + y, floor));
+									} else {
+										glColor(brushColor);
+									}
+
+									glBegin(GL_QUADS);
+									glVertex2f(cx, cy + TileSize);
+									glVertex2f(cx + TileSize, cy + TileSize);
+									glVertex2f(cx + TileSize, cy);
+									glVertex2f(cx, cy);
+									glEnd();
+								}
 							}
 						}
 					}
@@ -1050,10 +1283,25 @@ void MapDrawer::DrawBrush() {
 		}
 	} else {
 		if (brush->isWall()) {
-			int start_map_x = mouse_map_x - g_gui.GetBrushSize();
-			int start_map_y = mouse_map_y - g_gui.GetBrushSize();
-			int end_map_x = mouse_map_x + g_gui.GetBrushSize() + 1;
-			int end_map_y = mouse_map_y + g_gui.GetBrushSize() + 1;
+			int brush_width = g_gui.GetBrushWidth();
+			int brush_height = g_gui.GetBrushHeight();
+			
+			// Make sure we have valid non-zero dimensions
+			if (brush_width <= 0) brush_width = 1;
+			if (brush_height <= 0) brush_height = 1;
+			
+			// Calculate the start position (top-left corner of the brush)
+			int start_x = -brush_width / 2;
+			int start_y = -brush_height / 2;
+			
+			// For even width, we need to shift by 1 to avoid center bias
+			if (brush_width % 2 == 0) start_x += 1;
+			if (brush_height % 2 == 0) start_y += 1;
+			
+			int start_map_x = mouse_map_x + start_x;
+			int start_map_y = mouse_map_y + start_y;
+			int end_map_x = start_map_x + brush_width;
+			int end_map_y = start_map_y + brush_height;
 
 			int start_sx = start_map_x * TileSize - view_scroll_x - getFloorAdjustment(floor);
 			int start_sy = start_map_y * TileSize - view_scroll_y - getFloorAdjustment(floor);
@@ -1121,13 +1369,38 @@ void MapDrawer::DrawBrush() {
 				glEnable(GL_TEXTURE_2D);
 				raw_brush = brush->asRaw();
 			}
+			
+			if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
+				// Use custom dimensions for square brushes
+				int brush_width = g_gui.GetBrushWidth();
+				int brush_height = g_gui.GetBrushHeight();
+				
+				// Make sure we have valid non-zero dimensions
+				if (brush_width <= 0) brush_width = 1;
+				if (brush_height <= 0) brush_height = 1;
+				
+				// For even-sized brushes, we need to adjust the offset
+				int width_offset = (brush_width % 2 == 0) ? 0 : 1;
+				int height_offset = (brush_height % 2 == 0) ? 0 : 1;
+				
+				// Calculate the start position (top-left corner of the brush)
+				int start_x = -brush_width / 2;
+				int start_y = -brush_height / 2;
+				
+				// For even width, we need to shift by 1 to avoid center bias
+				if (brush_width % 2 == 0) start_x += 1;
+				if (brush_height % 2 == 0) start_y += 1;
+				
+				// Calculate the end position (bottom-right corner of the brush)
+				int end_x = start_x + brush_width - 1;
+				int end_y = start_y + brush_height - 1;
 
-			for (int y = -g_gui.GetBrushSize() - 1; y <= g_gui.GetBrushSize() + 1; y++) {
-				int cy = (mouse_map_y + y) * TileSize - view_scroll_y - getFloorAdjustment(floor);
-				for (int x = -g_gui.GetBrushSize() - 1; x <= g_gui.GetBrushSize() + 1; x++) {
-					int cx = (mouse_map_x + x) * TileSize - view_scroll_x - getFloorAdjustment(floor);
-					if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
-						if (x >= -g_gui.GetBrushSize() && x <= g_gui.GetBrushSize() && y >= -g_gui.GetBrushSize() && y <= g_gui.GetBrushSize()) {
+				// Draw with a 1-tile margin around the brush for the border/preview
+				for (int y = start_y - 1; y <= end_y + 1; y++) {
+					int cy = (mouse_map_y + y) * TileSize - view_scroll_y - getFloorAdjustment(floor);
+					for (int x = start_x - 1; x <= end_x + 1; x++) {
+						int cx = (mouse_map_x + x) * TileSize - view_scroll_x - getFloorAdjustment(floor);
+						if (x >= start_x && x <= end_x && y >= start_y && y <= end_y) {
 							if (brush->isRaw()) {
 								DrawRawBrush(cx, cy, raw_brush->getItemType(), 160, 160, 160, 160);
 							} else {
@@ -1151,7 +1424,14 @@ void MapDrawer::DrawBrush() {
 								}
 							}
 						}
-					} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
+					}
+				}
+			} else if (g_gui.GetBrushShape() == BRUSHSHAPE_CIRCLE) {
+				// Circle brushes use traditional radius-based calculation
+				for (int y = -g_gui.GetBrushSize() - 1; y <= g_gui.GetBrushSize() + 1; y++) {
+					int cy = (mouse_map_y + y) * TileSize - view_scroll_y - getFloorAdjustment(floor);
+					for (int x = -g_gui.GetBrushSize() - 1; x <= g_gui.GetBrushSize() + 1; x++) {
+						int cx = (mouse_map_x + x) * TileSize - view_scroll_x - getFloorAdjustment(floor);
 						double distance = sqrt(double(x * x) + double(y * y));
 						if (distance < g_gui.GetBrushSize() + 0.005) {
 							if (brush->isRaw()) {
@@ -1212,32 +1492,45 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, Item* it
 	GameSprite* spr = it.sprite;
 
 	// Display invisible and invalid items
-	// Ugly hacks. :)
 	if (!options.ingame && options.show_tech_items) {
+		// Check for custom colors first
+		int custom_red, custom_green, custom_blue;
+		if (InvisibleItemsColorManager::GetCustomColor(it.clientID, custom_red, custom_green, custom_blue)) {
+			BlitSquare(draw_x, draw_y, custom_red, custom_green, custom_blue, alpha / 3 * 2);
+			return;
+		}
+
 		// Red invalid client id
 		if (it.id == 0) {
-			BlitSquare(draw_x, draw_y, red, 0, 0, alpha);
+			auto color = InvisibleItemsColorManager::GetInvalidItemColor();
+			BlitSquare(draw_x, draw_y, color.red, color.green, color.blue, alpha);
 			return;
 		}
 
 		switch (it.clientID) {
 			// Yellow invisible stairs tile (459)
-			case 469:
-				BlitSquare(draw_x, draw_y, red, green, 0, alpha / 3 * 2);
+			case 469: {
+				auto color = InvisibleItemsColorManager::GetInvisibleStairsColor();
+				BlitSquare(draw_x, draw_y, color.red, color.green, color.blue, alpha / 3 * 2);
 				return;
+			}
 
 			// Red invisible walkable tile (460)
 			case 470:
 			case 17970:
 			case 20028:
-			case 34168:
-				BlitSquare(draw_x, draw_y, red, 0, 0, alpha / 3 * 2);
+			case 34168: {
+				auto color = InvisibleItemsColorManager::GetInvisibleWalkableColor();
+				BlitSquare(draw_x, draw_y, color.red, color.green, color.blue, alpha / 3 * 2);
 				return;
+			}
 
 			// Cyan invisible wall (1548)
-			case 2187:
-				BlitSquare(draw_x, draw_y, 0, green, blue, 80);
+			case 2187: {
+				auto color = InvisibleItemsColorManager::GetInvisibleWallColor();
+				BlitSquare(draw_x, draw_y, color.red, color.green, color.blue, 80);
 				return;
+			}
 
 			default:
 				break;
@@ -1548,6 +1841,11 @@ void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8
 }
 
 void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile) {
+	// Tooltip master enable
+	if (!g_settings.getBoolean(Config::TOOLTIP_SHOW)) {
+		return;
+	}
+
 	if (item == nullptr || zoom > g_settings.getInteger(Config::TOOLTIP_MAX_ZOOM)) {
 		return;
 	}
@@ -1557,6 +1855,15 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	const uint16_t id = item->getID();
 	if (id < 100) {
 		return;
+	}
+
+	// Tooltip ignore ID filtering
+	std::string ignore_ids_str = g_settings.getString(Config::TOOLTIP_IGNORE_IDS);
+	if (!ignore_ids_str.empty()) {
+		auto ignore_ranges = parseIdRangesString(ignore_ids_str);
+		if (isIdInRanges(id, ignore_ranges)) {
+			return;
+		}
 	}
 
 	const auto& zoneIds = tile->getZoneIds();
@@ -1574,7 +1881,39 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 	}
 
 	Teleport* tp = dynamic_cast<Teleport*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
+	
+	// Check if scripts exist for this item
+	bool hasScript = false;
+	if (g_gui.revscript_manager.isLoaded()) {
+		if (action > 0 && g_gui.revscript_manager.hasScriptForActionID(action)) {
+			hasScript = true;
+		} else if (unique > 0 && g_gui.revscript_manager.hasScriptForUniqueID(unique)) {
+			hasScript = true;
+		} else if (g_gui.revscript_manager.hasScriptForItemID(id)) {
+			hasScript = true;
+		}
+	}
+	
+	// Tooltip type filtering
+	bool show_hasScript = g_settings.getBoolean(Config::TOOLTIP_SHOW_HASSCRIPT);
+	bool show_text = g_settings.getBoolean(Config::TOOLTIP_SHOW_TEXT);
+
+	bool show_aid = g_settings.getBoolean(Config::TOOLTIP_SHOW_AID);
+	bool show_uid = g_settings.getBoolean(Config::TOOLTIP_SHOW_UID);
+	bool show_doorid = g_settings.getBoolean(Config::TOOLTIP_SHOW_DOORID);
+	bool show_destination = g_settings.getBoolean(Config::TOOLTIP_SHOW_DESTINATION);
+	bool show_houseid = g_settings.getBoolean(Config::TOOLTIP_SHOW_HOUSEID);
+
+	// If the only info is hasScript and it's disabled, suppress tooltip
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty() && hasScript && !show_hasScript) {
+		return;
+	}
+	// If the only info is text and it's disabled, suppress tooltip
+	if (unique == 0 && action == 0 && doorId == 0 && !text.empty() && !show_text && !tp && zoneIds.empty() && !hasScript) {
+		return;
+	}
+	// If the only info is text+hasScript and both are disabled, suppress tooltip
+	if (unique == 0 && action == 0 && doorId == 0 && !text.empty() && !show_text && !tp && zoneIds.empty() && hasScript && !show_hasScript) {
 		return;
 	}
 
@@ -1592,24 +1931,32 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 			}
 		}
 	} else {
-		stream << "id: " << id << "\n";
+		if (g_settings.getBoolean(Config::TOOLTIP_SHOW_ITEMID)) {
+			stream << "id: " << id << "\n";
+		}
 	}
 
-	if (action > 0) {
+	if (action > 0 && show_aid) {
 		stream << "aid: " << action << "\n";
 	}
-	if (unique > 0) {
+	if (unique > 0 && show_uid) {
 		stream << "uid: " << unique << "\n";
 	}
-	if (doorId > 0) {
+	if (doorId > 0 && show_doorid) {
 		stream << "door id: " << static_cast<int>(doorId) << "\n";
 	}
-	if (!text.empty()) {
+	if (!text.empty() && show_text) {
 		stream << "text: " << text << "\n";
 	}
-	if (tp) {
+	if (tp && show_destination) {
 		Position& dest = tp->getDestination();
 		stream << "destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
+	}
+	if (isHouseTile && show_houseid) {
+		stream << "house id: " << tile->getHouseID() << "\n";
+	}
+	if (hasScript && show_hasScript) {
+		stream << "hasScript: true\n";
 	}
 }
 
@@ -1714,8 +2061,21 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			if ((int)tile->getHouseID() == current_house_id) {
 				r /= 2;
 			} else {
+				// Use the new house coloring system
+				if (g_settings.getBoolean(Config::HOUSE_CUSTOM_COLORS)) {
+					// Get a distinctive color based on house ID
+					uint8_t house_r, house_g, house_b;
+					getHouseColor(tile->getHouseID(), house_r, house_g, house_b);
+					
+					// Blend the house color with the background
+					r = (r + house_r) / 3;
+					g = (g + house_g) / 3;
+					b = (b + house_b) / 3;
+				} else {
+					// Use the old blue-ish coloring
 				r /= 2;
 				g /= 2;
+				}
 			}
 		} else if (showspecial && tile->isPZ()) {
 			r /= 2;
@@ -1747,9 +2107,14 @@ void MapDrawer::DrawTile(TileLocation* location) {
 				b16 += std::get<2>(colour);
 			}
 
-			r = r16 / zones;
-			g = g16 / zones;
-			b = b16 / zones;
+			if (zones > 0) {  // Prevent division by zero
+				r = r16 / zones;
+				g = g16 / zones;
+				b = b16 / zones;
+			} else {
+				// Clear invalid zone flag to prevent future crashes
+				const_cast<Tile*>(tile)->unsetMapFlags(TILESTATE_ZONE_BRUSH);
+			}
 		}
 	}
 
@@ -1778,6 +2143,13 @@ void MapDrawer::DrawTile(TileLocation* location) {
 	if (options.show_tooltips && map_z == floor && tile->ground) {
 		WriteTooltip(tile, tile->ground, tooltip, tile->isHouseTile());
 	}
+	// Also show house tooltip even if there's no ground
+	else if (options.show_tooltips && map_z == floor && tile->isHouseTile() && g_settings.getBoolean(Config::TOOLTIP_SHOW_HOUSEID)) {
+		if (tooltip.tellp() > 0) {
+			tooltip << "\n";
+		}
+		tooltip << "house id: " << tile->getHouseID() << "\n";
+	}
 	// end filters for ground tile
 
 	if (!only_colors) {
@@ -1805,8 +2177,21 @@ void MapDrawer::DrawTile(TileLocation* location) {
 						if ((int)tile->getHouseID() == current_house_id) {
 							r /= 2;
 						} else {
+							// Use the new house coloring system
+							if (g_settings.getBoolean(Config::HOUSE_CUSTOM_COLORS)) {
+								// Get a distinctive color based on house ID
+								uint8_t house_r, house_g, house_b;
+								getHouseColor(tile->getHouseID(), house_r, house_g, house_b);
+								
+								// Blend the house color with the background
+								r = (r + house_r) / 3;
+								g = (g + house_g) / 3;
+								b = (b + house_b) / 3;
+							} else {
+								// Use the old blue-ish coloring
 							r /= 2;
 							g /= 2;
+							}
 						}
 					}
 					BlitItem(draw_x, draw_y, tile, *it, false, r, g, b);

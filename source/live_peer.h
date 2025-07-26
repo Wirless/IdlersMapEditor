@@ -73,6 +73,7 @@ protected:
 	void parseCursorUpdate(NetworkMessage& message);
 	void parseChatMessage(NetworkMessage& message);
 	void parseClientColorUpdate(NetworkMessage& message);
+	void parseClientRefreshRequest(NetworkMessage& message);
 
 	//
 	NetworkMessage readMessage;

@@ -528,6 +528,45 @@ bool tilePositionVisualLessThan(const Tile* a, const Tile* b) {
 	return false;
 }
 
+void Tile::validateZoneConsistency() {
+	bool hasZoneFlag = (mapflags & TILESTATE_ZONE_BRUSH) != 0;
+	bool hasZoneData = !zoneIds.empty();
+	
+	// ENHANCED FIX: Handle more edge cases to prevent division by zero
+	// Remove invalid zone IDs (0 values)
+	zoneIds.erase(std::remove(zoneIds.begin(), zoneIds.end(), 0), zoneIds.end());
+	
+	// Update hasZoneData after cleaning
+	hasZoneData = !zoneIds.empty();
+	
+	if (hasZoneFlag && !hasZoneData) {
+		// Clear invalid zone flag if no zone data exists
+		mapflags &= ~TILESTATE_ZONE_BRUSH;
+	} else if (!hasZoneFlag && hasZoneData) {
+		// Set zone flag if zone data exists but flag is missing
+		mapflags |= TILESTATE_ZONE_BRUSH;
+	}
+	
+	// CRITICAL FIX: Additional safety check for empty tiles with zones
+	// If the tile is completely empty but has zone data, clear zones to prevent crashes
+	if (zoneIds.size() > 0 && empty() && !ground) {
+		char debug_msg[256];
+		sprintf(debug_msg, "DEBUG DRAG: WARNING! Empty tile at (%d,%d,%d) has %zu zones - clearing to prevent crashes\n", 
+			getPosition().x, getPosition().y, getPosition().z, zoneIds.size());
+		OutputDebugStringA(debug_msg);
+		
+		clearZoneId();
+	}
+}
+
+bool Tile::hasValidZones() const {
+	bool hasZoneFlag = (mapflags & TILESTATE_ZONE_BRUSH) != 0;
+	bool hasZoneData = !zoneIds.empty();
+	
+	// Zones are valid if both flag and data are consistent
+	return (hasZoneFlag && hasZoneData) || (!hasZoneFlag && !hasZoneData);
+}
+
 void Tile::update() {
 	statflags &= TILESTATE_MODIFIED;
 
@@ -587,14 +626,33 @@ void Tile::update() {
 			statflags |= TILESTATE_BLOCKING;
 		}
 	}
+	
+	// Validate zone consistency to prevent crashes
+	validateZoneConsistency();
 }
 
 void Tile::borderize(BaseMap* parent) {
+	if (!ground) {
+		OutputDebugStringA("DEBUG DRAG: borderize called on tile with no ground, skipping\n");
+		return;
+	}
+	// Add debugging output for borderize operation
+	char debug_msg[512];
+	sprintf(debug_msg, "DEBUG DRAG: borderize called on tile at pos=(%d,%d,%d), SAME_GROUND_TYPE_BORDER=%d\n", 
+		getPosition().x, getPosition().y, getPosition().z, g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER));
+	OutputDebugStringA(debug_msg);
+	
 	if (g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER)) {
 		// Use the custom reborderize method for better border placement
+		sprintf(debug_msg, "DEBUG DRAG: Calling GroundBrush::reborderizeTile for tile at pos=(%d,%d,%d)\n", 
+			getPosition().x, getPosition().y, getPosition().z);
+		OutputDebugStringA(debug_msg);
 		GroundBrush::reborderizeTile(parent, this);
 	} else {
 		// Standard border handling
+		sprintf(debug_msg, "DEBUG DRAG: Calling GroundBrush::doBorders for tile at pos=(%d,%d,%d)\n", 
+			getPosition().x, getPosition().y, getPosition().z);
+		OutputDebugStringA(debug_msg);
 		GroundBrush::doBorders(parent, this);
 	}
 }

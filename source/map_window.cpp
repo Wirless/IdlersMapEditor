@@ -25,8 +25,8 @@
 MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr),
-	islandGeneratorDialog(nullptr) {
+	replaceItemsDialog(nullptr)
+{
 	int GL_settings[3];
 	GL_settings[0] = WX_GL_RGBA;
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
@@ -79,29 +79,7 @@ void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event) {
 	}
 }
 
-void MapWindow::ShowIslandGeneratorDialog() {
-	if (islandGeneratorDialog) {
-		return;
-	}
 
-	islandGeneratorDialog = new IslandGeneratorDialog(this);
-	islandGeneratorDialog->Connect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnIslandGeneratorDialogClose), NULL, this);
-	islandGeneratorDialog->Show();
-}
-
-void MapWindow::CloseIslandGeneratorDialog() {
-	if (islandGeneratorDialog) {
-		islandGeneratorDialog->Close();
-	}
-}
-
-void MapWindow::OnIslandGeneratorDialogClose(wxCloseEvent& event) {
-	if (islandGeneratorDialog) {
-		islandGeneratorDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnIslandGeneratorDialogClose), NULL, this);
-		islandGeneratorDialog->Destroy();
-		islandGeneratorDialog = nullptr;
-	}
-}
 
 void MapWindow::ShowGroundValidationDialog() {
 	if (groundValidationDialog) {
@@ -156,9 +134,7 @@ void MapWindow::UpdateDialogs(bool show) {
 	if (replaceItemsDialog) {
 		replaceItemsDialog->Show(show);
 	}
-	if (islandGeneratorDialog) {
-		islandGeneratorDialog->Show(show);
-	}
+
 }
 
 void MapWindow::GetViewStart(int* x, int* y) {

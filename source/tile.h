@@ -245,6 +245,10 @@ public: // Functions
 	const std::vector<uint16_t>& getZoneIds() const;
 	uint16_t getZoneId() const;
 	
+	// Zone validation and consistency helpers
+	void validateZoneConsistency();
+	bool hasValidZones() const;
+	
 	void setMapFlags(uint16_t _flags);
 	void unsetMapFlags(uint16_t _flags);
 	uint16_t getMapFlags() const;
@@ -346,24 +350,37 @@ inline uint16_t Tile::getStatFlags() const {
 }
 
 inline void Tile::addZoneId(uint16_t _zoneId) {
+	if (_zoneId == 0) return;  // Don't add invalid zone ID
 	if (std::find(zoneIds.begin(), zoneIds.end(), _zoneId) == zoneIds.end()) {
 		zoneIds.push_back(_zoneId);
+		mapflags |= TILESTATE_ZONE_BRUSH;  // Ensure flag is set
 	}
 }
 
 inline void Tile::clearZoneId() {
 	zoneIds.clear();
+	mapflags &= ~TILESTATE_ZONE_BRUSH;  // Clear zone flag when clearing zone data
 }
 
 inline void Tile::setZoneIds(Tile* tile) {
 	zoneIds.clear();
 	zoneIds.assign(tile->getZoneIds().begin(), tile->getZoneIds().end());
+	// Set or clear zone flag based on whether we have zones
+	if (!zoneIds.empty()) {
+		mapflags |= TILESTATE_ZONE_BRUSH;
+	} else {
+		mapflags &= ~TILESTATE_ZONE_BRUSH;
+	}
 }
 
 inline void Tile::removeZoneId(uint16_t _zoneId) {
 	const auto& itZone = std::find(zoneIds.begin(), zoneIds.end(), _zoneId);
 	if (itZone != zoneIds.end()) {
 		zoneIds.erase(itZone);
+		// Clear zone flag if no zones remain
+		if (zoneIds.empty()) {
+			mapflags &= ~TILESTATE_ZONE_BRUSH;
+		}
 	}
 }
 

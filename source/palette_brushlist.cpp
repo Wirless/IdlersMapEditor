@@ -859,6 +859,9 @@ void BrushPanel::OnClickListBoxRow(wxCommandEvent& event) {
 	// Get the brush that was clicked
 	Brush* clicked_brush = tileset->brushlist[n];
 	
+	// Add to recent brushes list (this is a manual user selection)
+	g_gui.AddRecentBrush(clicked_brush);
+	
 	// If this brush is already selected, deselect it first
 	if(clicked_brush == g_gui.GetCurrentBrush()) {
 		g_gui.SelectBrush(nullptr, tileset->getType());
@@ -1165,6 +1168,9 @@ void BrushIconBox::OnClickBrushButton(wxCommandEvent& event) {
 			g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
 		}
 
+		// Add to recent brushes list (this is a manual user selection)
+		g_gui.AddRecentBrush(btn->brush);
+
 		// If this brush is already selected, deselect it first
 		if(btn->brush == g_gui.GetCurrentBrush()) {
 			g_gui.SelectBrush(nullptr, tileset->getType());
@@ -1236,7 +1242,29 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const {
 	} else {
 		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
 	}
-	dc.DrawText(wxstr(tileset->brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
+
+	// Compose label: ItemID [ClientID] ItemName
+	wxString label;
+	Brush* brush = tileset->brushlist[n];
+	uint16_t itemId = 0;
+	uint16_t clientId = 0;
+	std::string itemName;
+	if (brush->isRaw()) {
+		RAWBrush* raw = static_cast<RAWBrush*>(brush);
+		itemId = raw->getItemID();
+		ItemType* it = raw->getItemType();
+		if (it) {
+			clientId = it->clientID;
+			itemName = it->name;
+		}
+	} else {
+		itemId = static_cast<uint16_t>(brush->getID());
+		const ItemType& it = g_items.getItemType(itemId);
+		clientId = it.clientID;
+		itemName = it.name;
+	}
+	label.Printf("%d [%d] %s", itemId, clientId, wxString(itemName));
+	dc.DrawText(label, rect.GetX() + 40, rect.GetY() + 6);
 }
 
 wxCoord BrushListBox::OnMeasureItem(size_t n) const {
@@ -1358,6 +1386,10 @@ void BrushGridBox::OnClickBrushButton(wxCommandEvent& event) {
 		if(w) {
 			g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
 		}
+		
+		// Add to recent brushes list (this is a manual user selection)
+		g_gui.AddRecentBrush(btn->brush);
+		
 		g_gui.SelectBrush(btn->brush, tileset->getType());
 	}
 }
@@ -1797,6 +1829,9 @@ void DirectDrawBrushPanel::OnMouseClick(wxMouseEvent& event) {
 			if(w) {
 				g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
 			}
+
+			// Add to recent brushes list (this is a manual user selection)
+			g_gui.AddRecentBrush(tileset->brushlist[index]);
 
 			// If this brush is already selected, deselect it first
 			if(tileset->brushlist[index] == g_gui.GetCurrentBrush()) {
@@ -2434,6 +2469,9 @@ void SeamlessGridPanel::OnMouseClick(wxMouseEvent& event) {
 			if(w) {
 				g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
 			}
+			
+			// Add to recent brushes list (this is a manual user selection)
+			g_gui.AddRecentBrush(tileset->brushlist[index]);
 			
 			g_gui.SelectBrush(tileset->brushlist[index], tileset->getType());
 		}

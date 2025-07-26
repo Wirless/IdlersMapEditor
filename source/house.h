@@ -55,6 +55,11 @@ public:
 	Position getExit() const {
 		return exit;
 	}
+	//go to house
+	const PositionList& getTiles() const {
+		return tiles;
+	}
+
 	uint8_t getEmptyDoorID() const;
 	Position getDoorPositionByID(uint8_t id) const;
 

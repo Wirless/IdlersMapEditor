@@ -36,6 +36,8 @@ public:
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
 
+	void OnForceReloadRevScripts(wxCommandEvent&);
+
 	void OnCollapsiblePane(wxCollapsiblePaneEvent&);
 
 	void UpdateClientOverride();
@@ -65,18 +67,22 @@ protected:
 	wxCheckBox* duplicate_id_warn_chkbox;
 	wxCheckBox* house_remove_chkbox;
 	wxCheckBox* auto_assign_doors_chkbox;
+	wxCheckBox* auto_assign_depot_to_closest_temple_chkbox;
 	wxCheckBox* eraser_leave_unique_chkbox;
 	wxCheckBox* doodad_erase_same_chkbox;
 	wxCheckBox* auto_create_spawn_chkbox;
 	wxCheckBox* allow_multiple_orderitems_chkbox;
 	wxCheckBox* merge_move_chkbox;
 	wxCheckBox* merge_paste_chkbox;
+	wxSpinCtrl* refresh_radius_spin;
 
 	// Graphics
 	wxCheckBox* icon_selection_shadow_chkbox;
 	wxChoice* icon_background_choice;
 	wxCheckBox* use_memcached_chkbox;
 	wxDirPickerCtrl* screenshot_directory_picker;
+	wxDirPickerCtrl* revscript_directory_picker;
+	wxButton* force_reload_revscripts_btn;
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;
 	wxColourPickerCtrl* cursor_color_pick;
@@ -130,10 +136,13 @@ protected:
 	wxSlider* scroll_speed_slider;
 	wxSlider* zoom_speed_slider;
 
+
+
 	// Client info
 	wxChoice* default_version_choice;
 	std::vector<wxDirPickerCtrl*> version_dir_pickers;
 	wxCheckBox* check_sigs_chkbox;
+	wxCheckBox* force_client_otb_chkbox;
 
 	// Create controls
 	wxChoice* AddPaletteStyleChoice(wxWindow* parent, wxSizer* sizer, const wxString& short_description, const wxString& description, const std::string& setting);
@@ -147,14 +156,38 @@ protected:
 	wxNotebookPage* CreateClientPage();
 	wxNotebookPage* CreateLODPage();
 	wxNotebookPage* CreateAutomagicPage();
+	wxNotebookPage* CreateTooltipInfoPage();
+	wxNotebookPage* CreateInvisibleItemsPage();
 
 	// Helper method to update the UI state of dark mode controls
 	void UpdateDarkModeUI();
+	
+	// Helper method to update the UI state of invisible items controls
+	void UpdateInvisibleItemsUI();
+
+	// Helper method to update the UI state of client box controls
+	void UpdateClientBoxUI();
 
 	// Add with other checkbox declarations
 	wxCheckBox* auto_select_raw_chkbox;
+	wxCheckBox* show_map_warnings_chkbox;
 	wxCheckBox* autosave_chkbox;
 	wxSpinCtrl* autosave_interval_spin;
+	
+	// Invisible Items Color controls
+	wxCheckBox* invisible_items_custom_chkbox;
+	wxColourPickerCtrl* invisible_invalid_color_pick;
+	wxColourPickerCtrl* invisible_stairs_color_pick;
+	wxColourPickerCtrl* invisible_walkable_color_pick;
+	wxColourPickerCtrl* invisible_wall_color_pick;
+	wxTextCtrl* invisible_custom_ids_textctrl;
+	
+	// Client Box Size controls
+	wxCheckBox* ingame_box_custom_size_chkbox;
+	wxSpinCtrl* ingame_box_width_spin;
+	wxSpinCtrl* ingame_box_height_spin;
+	wxSpinCtrl* ingame_box_offset_x_spin;
+	wxSpinCtrl* ingame_box_offset_y_spin;
 	
 	// LOD settings
 	wxSpinCtrl* tooltip_max_zoom_spin;
@@ -171,6 +204,22 @@ protected:
 	// Palette grid settings
 	wxSpinCtrl* chunk_size_spin;
 	wxSpinCtrl* visible_rows_margin_spin;
+
+	// Tooltip Info
+	wxTextCtrl* tooltip_ignore_ids_textctrl;
+	wxCheckBox* tooltip_enable_chkbox;
+	wxCheckBox* tooltip_show_hasscript_chkbox;
+	wxCheckBox* tooltip_show_text_chkbox;
+	wxCheckBox* tooltip_show_itemid_chkbox;
+	wxCheckBox* tooltip_show_aid_chkbox;
+	wxCheckBox* tooltip_show_uid_chkbox;
+	wxCheckBox* tooltip_show_doorid_chkbox;
+	wxCheckBox* tooltip_show_destination_chkbox;
+	wxCheckBox* tooltip_show_houseid_chkbox;
+	wxCheckBox* house_custom_colors_chkbox;
+
+	// Map warning suppression
+	wxCheckBox* suppress_map_warnings_chkbox;
 
 	DECLARE_EVENT_TABLE()
 };

@@ -74,4 +74,6 @@ extern unsigned char window_normal_png[947];
 extern unsigned char window_normal_small_png[641];
 extern unsigned char zone_brush_small_png[603];
 extern unsigned char zone_brush_zone_png[832];
+extern unsigned char refresh_small_png[603];
+extern unsigned char refresh_zone_png[832];
 #endif //_RME_PNG_HEADER_FILE_H_

@@ -449,6 +449,7 @@ void BrushSizePanel::OnUpdateBrushSize(BrushShape shape, int size) {
 		brushsize11Button->SetValue(false);
 	}
 
+	// Handle brush size selection
 	switch (size) {
 		case 0:
 			brushsize0Button->SetValue(true);
@@ -472,7 +473,8 @@ void BrushSizePanel::OnUpdateBrushSize(BrushShape shape, int size) {
 			brushsize11Button->SetValue(true);
 			break;
 		default:
-			brushsize0Button->SetValue(true);
+			// For custom sizes, don't highlight any button
+			// This allows the user to have a custom brush size without any button highlighted
 			break;
 	}
 }

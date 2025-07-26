@@ -66,6 +66,9 @@ public:
 	void sendChat(const wxString& chatMessage) override;
 	void sendReady();
 	void sendColorUpdate(uint32_t targetClientId, const wxColor& color);
+	
+	// Request a refresh of the visible area from the server
+	void requestVisibleRefresh();
 
 	// Flags a node as queried and stores it, need to call SendNodeRequest to send it to server
 	void queryNode(int32_t ndx, int32_t ndy, bool underground);

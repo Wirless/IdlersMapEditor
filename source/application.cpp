@@ -297,15 +297,17 @@ void Application::OnEventLoopEnter(wxEventLoopBase* loop) {
 	
 	// Calculate difference in days
 	const time_t secondsPerDay = 60 * 60 * 24;
-	const int daysToWait = 7;
+	const int daysToWait = 3;
 	
 	// If last open time is 0 (never opened) or if 7+ days have passed
 	if (lastOpenTime == 0 || difftime(currentTime, lastOpenTime) > daysToWait * secondsPerDay) {
 		// Open Discord and Idler.live URLs in the default browser
 		::wxLaunchDefaultBrowser("https://discord.gg/FD2cYKBq5E", wxBROWSER_NEW_WINDOW);
+		::wxLaunchDefaultBrowser("https://paypal.me/PatrykZmyslony", wxBROWSER_NEW_WINDOW);
 		// Update the last open time
 		g_settings.setInteger(Config::LAST_WEBSITES_OPEN_TIME, static_cast<int>(currentTime));
 	}
+	
 }
 
 void Application::MacOpenFiles(const wxArrayString& fileNames) {

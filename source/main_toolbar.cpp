@@ -27,6 +27,7 @@
 #include <wx/mstream.h>
 #include "hotkey_manager.h"
 #include <pugixml.hpp>
+#include "live_client.h"
 
 const wxString MainToolBar::STANDARD_BAR_NAME = "standard_toolbar";
 const wxString MainToolBar::BRUSHES_BAR_NAME = "brushes_toolbar";
@@ -68,6 +69,7 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	standard_toolbar->AddTool(wxID_CUT, wxEmptyString, cut_bitmap, wxNullBitmap, wxITEM_NORMAL, "Cut", wxEmptyString, NULL);
 	standard_toolbar->AddTool(wxID_COPY, wxEmptyString, copy_bitmap, wxNullBitmap, wxITEM_NORMAL, "Copy", wxEmptyString, NULL);
 	standard_toolbar->AddTool(wxID_PASTE, wxEmptyString, paste_bitmap, wxNullBitmap, wxITEM_NORMAL, "Paste", wxEmptyString, NULL);
+	standard_toolbar->AddSeparator();
 	standard_toolbar->Realize();
 
 	wxBitmap* border_bitmap = loadPNGFile(optional_border_small_png);
@@ -205,7 +207,7 @@ void MainToolBar::UpdateButtons() {
 	standard_toolbar->EnableTool(wxID_SAVEAS, is_host);
 	standard_toolbar->EnableTool(wxID_CUT, has_map);
 	standard_toolbar->EnableTool(wxID_COPY, has_map);
-
+	
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ERASER, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_PZ_TOOL, has_map);

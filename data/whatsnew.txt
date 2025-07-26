@@ -1,3 +1,63 @@
+Version 7.1.3[Not Finished]
+Item Editor
+
+Version 7.12
+Circle Brush Fix
+
+Version 7.11
+Place deposit with town for closest TEMPLE position.
+
+Version 7.10
+Division by 0 zones fixes 
+
+Version 7.09
+Reset Town IDs ( for account makers corectness)
+
+Version 7.08 
+Reset House IDs (database correctness)
+
+Version 7.07
+Sort list for found items
+
+Version 7.06
+Load items.otb from client data folder
+
+Version 7.05
+Custom Client Box View Size
+
+Version 7.04
+Invisible color manager e.g stairs strange tile etc
+
+Version 7.03
+ActionID Unique ID Paste in Context menu
+
+Version 7.0.2
+Zone cut crash bug
+
+Version 7.0.1
+Added monster script support
+
+Version 7.0.0
+Added npc script support
+
+6.9.9
+Monster Maker created
+
+6.9.8
+Added visual creature add
+
+6.9.7 
+Draw colors in creatures
+
+6.9.6
+Fixed Goto position
+
+Version 6.9.5
+Recent_brush
+
+Version 6.9.4
+Live mapping fixed 
+
 Version 6.9.3
 Added house color and further tooltip expansions
 

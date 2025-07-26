@@ -26,6 +26,9 @@ class Map;
 
 // Constant for Next search button ID
 #define SEARCH_RESULT_NEXT_BUTTON 1001
+#define SEARCH_RESULT_SORT_NUMERICAL 1002
+#define SEARCH_RESULT_SORT_ALPHABETICAL 1003
+#define SEARCH_RESULT_SORT_POSITION 1004
 
 class SearchResultWindow : public wxPanel {
 public:
@@ -53,6 +56,9 @@ public:
 	void OnClickExport(wxCommandEvent&);
 	void OnClickClear(wxCommandEvent&);
 	void OnClickNext(wxCommandEvent&);
+	void OnClickSortNumerical(wxCommandEvent&);
+	void OnClickSortAlphabetical(wxCommandEvent&);
+	void OnClickSortPosition(wxCommandEvent&);
 
 protected:
 	wxListBox* result_list;
@@ -66,6 +72,11 @@ protected:
 	bool has_last_search;
 	wxString last_ignored_ids_text;
 	bool last_ignored_ids_enabled;
+
+	// Sorting helper methods
+	void SortResultsByID();
+	void SortResultsByName();
+	void SortResultsByPosition();
 
 	DECLARE_EVENT_TABLE()
 };

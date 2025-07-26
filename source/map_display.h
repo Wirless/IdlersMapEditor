@@ -70,8 +70,12 @@ public:
 	void OnCopyServerId(wxCommandEvent& event);
 	void OnCopyClientId(wxCommandEvent& event);
 	void OnCopyName(wxCommandEvent& event);
-	void OnBrowseTile(wxCommandEvent& event);
+	void OnCopyActionId(wxCommandEvent& event);
+	void OnCopyUniqueId(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
+	void OnPasteActionId(wxCommandEvent& event);
+	void OnPasteUniqueId(wxCommandEvent& event);
+	void OnBrowseTile(wxCommandEvent& event);
 	void OnDelete(wxCommandEvent& event);
 	// ----
 	void OnGotoDestination(wxCommandEvent& event);
@@ -92,13 +96,17 @@ public:
 	void OnSelectMoveTo(wxCommandEvent& event);
 
 	void OnFindSimilarItems(wxCommandEvent& event);
-	void OnGenerateIsland(wxCommandEvent& event);
+
 	void OnCreateHouse(wxCommandEvent& event);
 
 	void OnSelectionToDoodad(wxCommandEvent& event);
 	// ---
 	void OnProperties(wxCommandEvent& event);
 	void OnFill(wxCommandEvent& event);
+	void OnOpenRevScript(wxCommandEvent& event);
+	void OnOpenNPCXML(wxCommandEvent& event);
+	void OnOpenNPCScript(wxCommandEvent& event);
+	void OnOpenMonsterXML(wxCommandEvent& event);
 
 	void Refresh();
 

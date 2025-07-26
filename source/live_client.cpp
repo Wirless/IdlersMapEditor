@@ -940,3 +940,52 @@ void LiveClient::sendColorUpdate(uint32_t targetClientId, const wxColor& color) 
 	
 	send(message);
 }
+
+void LiveClient::requestVisibleRefresh() {
+	try {
+		if (!editor) {
+			logMessage("[Client]: Cannot refresh view - editor not available");
+			return;
+		}
+
+		// Get the visible area from the current MapWindow
+		MapTab* mapTab = g_gui.GetCurrentMapTab();
+		if (!mapTab) {
+			logMessage("[Client]: Cannot refresh view - no map tab available");
+			return;
+		}
+		
+		// Get the current view center position
+		Position viewPosition = mapTab->GetScreenCenterPosition();
+		
+		// Get the configured refresh radius from settings
+		int refreshRadius = g_settings.getInteger(Config::REFRESH_RADIUS);
+		
+		// Calculate the visible area in node coordinates (4x4 tiles per node)
+		int32_t startNodeX = (viewPosition.x - refreshRadius) / 4;
+		int32_t startNodeY = (viewPosition.y - refreshRadius) / 4;
+		int32_t endNodeX = (viewPosition.x + refreshRadius) / 4;
+		int32_t endNodeY = (viewPosition.y + refreshRadius) / 4;
+		
+		// Prepare and send the refresh request
+		NetworkMessage message;
+		message.write<uint8_t>(PACKET_CLIENT_REQUEST_REFRESH);
+		message.write<int32_t>(startNodeX);
+		message.write<int32_t>(startNodeY);
+		message.write<int32_t>(endNodeX);
+		message.write<int32_t>(endNodeY);
+		message.write<uint8_t>(viewPosition.z);
+		message.write<bool>(viewPosition.z > GROUND_LAYER); // underground flag
+		
+		logMessage(wxString::Format("[Client]: Requesting refresh for visible area around (%d,%d,%d) with radius %d", 
+			viewPosition.x, viewPosition.y, viewPosition.z, refreshRadius));
+		
+		send(message);
+		
+		// Show a status message to the user
+		g_gui.SetStatusText("Refreshing visible area...");
+	}
+	catch (const std::exception& e) {
+		logMessage(wxString::Format("[Client]: Error requesting visible refresh: %s", e.what()));
+	}
+}

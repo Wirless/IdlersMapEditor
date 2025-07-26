@@ -117,6 +117,8 @@ public: // Functions
 	void destroySelection();
 	// Borderizes the selected region
 	void borderizeSelection();
+	// Wallizes the selected region
+	void wallizeSelection();
 	// Randomizes the ground in the selected region
 	void randomizeSelection();
 
@@ -124,6 +126,7 @@ public: // Functions
 	// action queue is flushed when these functions are called
 	// showdialog is whether a progress bar should be shown
 	void borderizeMap(bool showdialog);
+	void wallizeMap(bool showdialog);
 	void randomizeMap(bool showdialog);
 	void clearInvalidHouseTiles(bool showdialog);
 	void clearModifiedTileState(bool showdialog);

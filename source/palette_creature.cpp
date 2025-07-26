@@ -1827,7 +1827,7 @@ void CreatureSeamlessGridPanel::OnMouseClick(wxMouseEvent& event) {
 	if (index != -1) {
 		selected_index = index;
 		Refresh();
-		
+	
 		// Notify parent of selection
 		wxCommandEvent selectionEvent(wxEVT_COMMAND_LISTBOX_SELECTED);
 		wxPostEvent(GetParent(), selectionEvent);

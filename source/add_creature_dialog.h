@@ -7,6 +7,7 @@
 class wxSpinCtrl;
 class wxTextCtrl;
 class wxRadioBox;
+class wxPanel;
 
 class AddCreatureDialog : public wxDialog {
 public:
@@ -18,6 +19,8 @@ public:
 protected:
     void OnClickOK(wxCommandEvent& event);
     void OnClickCancel(wxCommandEvent& event);
+    void OnOutfitChange(wxCommandEvent& event);
+    void OnPreviewPaint(wxPaintEvent& event);
 
 private:
     wxTextCtrl* name_field;
@@ -27,8 +30,12 @@ private:
     wxSpinCtrl* looklegs_field;
     wxSpinCtrl* lookfeet_field;
     wxRadioBox* type_radio;
+    wxPanel* preview_panel;
 
     CreatureType* creature_type;
+    
+    // Helper functions
+    void UpdatePreview();
 
     DECLARE_EVENT_TABLE()
 };

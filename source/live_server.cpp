@@ -327,7 +327,7 @@ void LiveServer::broadcastNodes(DirtyList& dirtyList) {
 	};
 
 	std::shared_ptr<BroadcastData> broadcastData = std::make_shared<BroadcastData>();
-	broadcastData->owner = 0; // Server is always owner 0
+	broadcastData->owner = dirtyList.owner; // Set the correct owner
 	
 	try {
 		// Get the changes from the dirty list, converting them to a format we can save and broadcast
@@ -359,6 +359,7 @@ void LiveServer::broadcastNodes(DirtyList& dirtyList) {
 		// Safe logging of the node count
 		if (logFile.is_open()) {
 			logFile << "Changes: " << broadcastData->changes.size() << ", Positions: " << broadcastData->positions.size() << "\n";
+			logFile << "Change owner: " << broadcastData->owner << "\n";
 		}
 		
 		// Use a safer approach with CallAfter
@@ -366,8 +367,8 @@ void LiveServer::broadcastNodes(DirtyList& dirtyList) {
 			try {
 				if (!editor || !drawingReady) return;
 
-				// Handle host changes first
-				if (broadcastData->owner == 0 && !broadcastData->changes.empty()) {
+				// Apply changes to the host if the owner is not the host
+				if (broadcastData->owner != 0 && !broadcastData->changes.empty()) {
 					NetworkedAction* action = static_cast<NetworkedAction*>(editor->actionQueue->createAction(ACTION_REMOTE));
 					if (action) {
 						action->owner = broadcastData->owner;
@@ -412,9 +413,18 @@ void LiveServer::broadcastNodes(DirtyList& dirtyList) {
 
 						const uint32_t clientId = peer->getClientId();
 						
-						if (node->isVisible(clientId, true) || node->isVisible(clientId, false)) {
-							workItems.push_back({peer, node, ndx, ndy, floors, clientId});
+						// Skip sending changes back to the client that made them
+						if (broadcastData->owner != 0 && clientId == broadcastData->owner) {
+							continue;
 						}
+						
+						// Always broadcast to all clients, regardless of visibility
+						// This ensures all clients see all changes
+						workItems.push_back({peer, node, ndx, ndy, floors, clientId});
+						
+						// Mark the node as visible to this client to ensure future updates are sent
+						node->setVisible(clientId, true, true);
+						node->setVisible(clientId, false, true);
 					}
 				}
 

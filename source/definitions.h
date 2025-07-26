@@ -18,17 +18,17 @@
 #ifndef RME_DEFINITIONS_H_
 #define RME_DEFINITIONS_H_
 
-#define __W_RME_APPLICATION_NAME__ wxString("OTARMEIE - Idler Map Editor")
+#define __W_RME_APPLICATION_NAME__ wxString("OTARMEIE - Idler Game Editor")
 #define __RME_APPLICATION_NAME__ std::string("OTARMEIE")
 
 // Version info
 // xxyyzzt (major, minor, subversion)
-#define __RME_VERSION_MAJOR__ 6
-#define __RME_VERSION_MINOR__ 8
+#define __RME_VERSION_MAJOR__ 7
+#define __RME_VERSION_MINOR__ 1
 #define __RME_SUBVERSION__ 2
 
 
-#define __LIVE_NET_VERSION__ 5
+#define __LIVE_NET_VERSION__ 6
 
 #define MAKE_VERSION_ID(major, minor, subversion) \
 	((major) * 10000000 + (minor) * 100000 + (subversion) * 1000)

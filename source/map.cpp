@@ -363,6 +363,68 @@ void Map::convertHouseTiles(uint32_t fromId, uint32_t toId) {
 	g_gui.DestroyLoadBar();
 }
 
+uint32_t Map::validateZoneConsistency(bool showdialog) {
+	if (showdialog) {
+		g_gui.CreateLoadBar("Validating zone consistency...");
+	}
+	
+	uint32_t fixed_tiles = 0;
+	uint64_t tiles_done = 0;
+	uint64_t total_tiles = getTileCount();
+
+	for (MapIterator miter = begin(); miter != end(); ++miter) {
+		Tile* tile = (*miter)->get();
+		ASSERT(tile);
+
+		if (!tile->hasValidZones()) {
+			tile->validateZoneConsistency();
+			fixed_tiles++;
+		}
+
+		++tiles_done;
+		if (showdialog && tiles_done % 0x10000 == 0) {
+			g_gui.SetLoadDone(int(tiles_done / double(total_tiles) * 100.0));
+		}
+	}
+
+	if (showdialog) {
+		g_gui.DestroyLoadBar();
+	}
+	
+	return fixed_tiles;
+}
+
+void Map::fixInconsistentZones() {
+	// This is a more aggressive cleanup that removes all inconsistent zone data
+	for (MapIterator it = begin(); it != end(); ++it) {
+		Tile* tile = (*it)->get();
+		if (!tile) continue;
+		
+		// ENHANCED FIX: Check for more zone inconsistency types
+		bool hasZoneFlag = (tile->getMapFlags() & TILESTATE_ZONE_BRUSH) != 0;
+		bool hasZoneData = !tile->getZoneIds().empty();
+		
+		// Case 1: Flag set but no zone data  
+		// Case 2: Zone data exists but no flag
+		// Case 3: Empty tile with zone data (dangerous for division by zero)
+		if ((hasZoneFlag && !hasZoneData) || 
+			(!hasZoneFlag && hasZoneData) ||
+			(hasZoneData && tile->empty() && !tile->ground)) {
+			
+			char debug_msg[256];
+			sprintf(debug_msg, "DEBUG DRAG: Map cleanup - fixing zone inconsistency at (%d,%d,%d) - flag=%d, data=%zu, empty=%d\n", 
+				tile->getPosition().x, tile->getPosition().y, tile->getPosition().z,
+				hasZoneFlag, tile->getZoneIds().size(), tile->empty());
+			OutputDebugStringA(debug_msg);
+			
+			tile->clearZoneId(); // This also clears the flag
+			
+			// Additional validation after clearing
+			tile->validateZoneConsistency();
+		}
+	}
+}
+
 MapVersion Map::getVersion() const {
 	return mapVersion;
 }

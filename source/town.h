@@ -69,6 +69,7 @@ public:
 
 	bool addTown(Town* town);
 	uint32_t getEmptyID();
+	void changeId(Town* town, uint32_t newID);
 
 	Town* getTown(std::string& townname);
 	Town* getTown(uint32_t _townid);

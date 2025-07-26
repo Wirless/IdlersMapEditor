@@ -71,6 +71,10 @@
 #include "border_editor_window.h"
 #include "map_summary_window.h"
 #include "otmapgen_dialog.h"
+#include "notes_window.h"
+#include "add_creature_dialog.h"
+#include "doodads_filling_dialog.h"
+#include "item_editor_window.h"
 
 #include <wx/chartype.h>
 
@@ -80,6 +84,10 @@
 #include "live_server.h"
 #include "string_utils.h"
 #include "hotkey_manager.h"
+#include "chat_window.h"
+#include "creature_brush.h"
+#include "brush.h"
+#include "tileset.h"
 
 const wxEventType EVT_MENU = wxEVT_COMMAND_MENU_SELECTED;
 
@@ -90,8 +98,11 @@ BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 	EVT_MENU(MenuBar::SAVE_AS, MainMenuBar::OnSaveAs)
 	EVT_MENU(MenuBar::GENERATE_MAP, MainMenuBar::OnGenerateMap)
 	EVT_MENU(MenuBar::GENERATE_PROCEDURAL_MAP, MainMenuBar::OnGenerateProceduralMap)
-	EVT_MENU(MenuBar::MAP_MENU_GENERATE_ISLAND, MainMenuBar::OnGenerateIsland)
+
+	
 	EVT_MENU(MenuBar::FIND_CREATURE, MainMenuBar::OnSearchForCreature)
+	EVT_MENU(MenuBar::RELOAD_REVSCRIPTS, MainMenuBar::OnReloadRevScripts)
+	EVT_MENU(MenuBar::DOODADS_FILLING_TOOL, MainMenuBar::OnDoodadsFillingTool)
 END_EVENT_TABLE()
 
 MainMenuBar::MainMenuBar(MainFrame* frame) :
@@ -110,6 +121,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SAVE_AS, wxITEM_NORMAL, OnSaveAs);
 	MAKE_ACTION(GENERATE_MAP, wxITEM_NORMAL, OnGenerateMap);
 	MAKE_ACTION(GENERATE_PROCEDURAL_MAP, wxITEM_NORMAL, OnGenerateProceduralMap);
+
 	MAKE_ACTION(CLOSE, wxITEM_NORMAL, OnClose);
 
 	MAKE_ACTION(IMPORT_MAP, wxITEM_NORMAL, OnImportMap);
@@ -119,6 +131,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(EXPORT_TILESETS, wxITEM_NORMAL, OnExportTilesets);
 
 	MAKE_ACTION(RELOAD_DATA, wxITEM_NORMAL, OnReloadDataFiles);
+	MAKE_ACTION(RELOAD_REVSCRIPTS, wxITEM_NORMAL, OnReloadRevScripts);
 	// MAKE_ACTION(RECENT_FILES, wxITEM_NORMAL, OnRecent);
 	MAKE_ACTION(PREFERENCES, wxITEM_NORMAL, OnPreferences);
 	MAKE_ACTION(EXIT, wxITEM_NORMAL, OnQuit);
@@ -153,12 +166,15 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	
 	MAKE_ACTION(BORDERIZE_SELECTION, wxITEM_NORMAL, OnBorderizeSelection);
 	MAKE_ACTION(BORDERIZE_MAP, wxITEM_NORMAL, OnBorderizeMap);
+	MAKE_ACTION(WALLIZE_SELECTION, wxITEM_NORMAL, OnWallizeSelection);
+	MAKE_ACTION(WALLIZE_MAP, wxITEM_NORMAL, OnWallizeMap);
 	MAKE_ACTION(RANDOMIZE_SELECTION, wxITEM_NORMAL, OnRandomizeSelection);
 	MAKE_ACTION(RANDOMIZE_MAP, wxITEM_NORMAL, OnRandomizeMap);
 	MAKE_ACTION(GOTO_PREVIOUS_POSITION, wxITEM_NORMAL, OnGotoPreviousPosition);
 	MAKE_ACTION(GOTO_POSITION, wxITEM_NORMAL, OnGotoPosition);
 	MAKE_ACTION(JUMP_TO_BRUSH, wxITEM_NORMAL, OnJumpToBrush);
 	MAKE_ACTION(JUMP_TO_ITEM_BRUSH, wxITEM_NORMAL, OnJumpToItemBrush);
+	MAKE_ACTION(MENU_REFRESH_VISIBLE_AREA, wxITEM_NORMAL, OnRefreshVisibleArea);
 
 	MAKE_ACTION(CUT, wxITEM_NORMAL, OnCut);
 	MAKE_ACTION(COPY, wxITEM_NORMAL, OnCopy);
@@ -179,6 +195,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, OnMapCleanHouseItems);
 	MAKE_ACTION(MAP_PROPERTIES, wxITEM_NORMAL, OnMapProperties);
 	MAKE_ACTION(MAP_STATISTICS, wxITEM_NORMAL, OnMapStatistics);
+	MAKE_ACTION(MAP_NOTES, wxITEM_NORMAL, OnMapNotes);
+	MAKE_ACTION(DOODADS_FILLING_TOOL, wxITEM_NORMAL, OnDoodadsFillingTool);
 
 	MAKE_ACTION(VIEW_TOOLBARS_BRUSHES, wxITEM_CHECK, OnToolbars);
 	MAKE_ACTION(VIEW_TOOLBARS_POSITION, wxITEM_CHECK, OnToolbars);
@@ -220,10 +238,12 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SHOW_TOWNS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(ALWAYS_SHOW_ZONES, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(EXT_HOUSE_SHADER, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(HOUSE_CUSTOM_COLORS, wxITEM_CHECK, OnChangeViewSettings);
 
 	MAKE_ACTION(EXPERIMENTAL_FOG, wxITEM_CHECK, OnChangeViewSettings); // experimental
 
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
+	MAKE_ACTION(WIN_RECENT_BRUSHES, wxITEM_NORMAL, OnRecentBrushesWindow);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 
@@ -264,11 +284,20 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
 	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys); // Add this line
+	MAKE_ACTION(SHOW_MONSTER_MAKER, wxITEM_NORMAL, OnShowMonsterMaker);
+	MAKE_ACTION(ADD_NEW_CREATURE, wxITEM_NORMAL, OnAddNewCreature);
 	MAKE_ACTION(REFRESH_ITEMS, wxITEM_NORMAL, OnRefreshItems);
 	// 669
 	MAKE_ACTION(FIND_CREATURE, wxITEM_NORMAL, OnSearchForCreature);
 	MAKE_ACTION(MAP_CREATE_BORDER, wxITEM_NORMAL, OnCreateBorder);
+	// Chat actions
+	MAKE_ACTION(CHAT_REGISTER, wxITEM_NORMAL, OnChatRegister);
+	MAKE_ACTION(CHAT_CONNECT, wxITEM_NORMAL, OnChatConnect);
 	MAKE_ACTION(MAP_SUMMARIZE, wxITEM_NORMAL, OnMapSummarize);
+	MAKE_ACTION(RESET_HOUSE_IDS, wxITEM_NORMAL, OnResetHouseIDs);
+	MAKE_ACTION(RESET_TOWN_IDS, wxITEM_NORMAL, OnResetTownIDs);
+	MAKE_ACTION(DOODADS_FILLING_TOOL, wxITEM_NORMAL, OnDoodadsFillingTool);
+	MAKE_ACTION(EDIT_ITEMS_OTB, wxITEM_NORMAL, OnEditItemsOTB);
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -405,6 +434,8 @@ void MainMenuBar::Update() {
 	EnableItem(EXPORT_MINIMAP, is_local);
 	EnableItem(EXPORT_TILESETS, loaded);
 
+	EnableItem(RELOAD_REVSCRIPTS, is_local);
+
 	EnableItem(FIND_ITEM, is_host);
 	EnableItem(REPLACE_ITEMS, is_local);
 	EnableItem(SEARCH_ON_MAP_EVERYTHING, is_host);
@@ -426,6 +457,8 @@ void MainMenuBar::Update() {
 
 	EnableItem(BORDERIZE_SELECTION, has_map && has_selection);
 	EnableItem(BORDERIZE_MAP, is_local);
+	EnableItem(WALLIZE_SELECTION, has_map && has_selection);
+	EnableItem(WALLIZE_MAP, is_local);
 	EnableItem(RANDOMIZE_SELECTION, has_map && has_selection);
 	EnableItem(RANDOMIZE_MAP, is_local);
 
@@ -448,6 +481,7 @@ void MainMenuBar::Update() {
 	EnableItem(MAP_CLEANUP, is_local);
 	EnableItem(MAP_PROPERTIES, is_local);
 	EnableItem(MAP_STATISTICS, is_local);
+	EnableItem(MAP_NOTES, is_local);
 
 	EnableItem(NEW_VIEW, has_map);
 	EnableItem(NEW_DETACHED_VIEW, has_map);
@@ -543,6 +577,7 @@ void MainMenuBar::LoadValues() {
 	CheckItem(SHOW_TOWNS, g_settings.getBoolean(Config::SHOW_TOWNS));
 	CheckItem(ALWAYS_SHOW_ZONES, g_settings.getBoolean(Config::ALWAYS_SHOW_ZONES));
 	CheckItem(EXT_HOUSE_SHADER, g_settings.getBoolean(Config::EXT_HOUSE_SHADER));
+	CheckItem(HOUSE_CUSTOM_COLORS, g_settings.getBoolean(Config::HOUSE_CUSTOM_COLORS));
 
 	CheckItem(EXPERIMENTAL_FOG, g_settings.getBoolean(Config::EXPERIMENTAL_FOG));
 }
@@ -813,6 +848,7 @@ void MainMenuBar::OnGenerateProceduralMap(wxCommandEvent& WXUNUSED(event)) {
 	}
 }
 
+
 void MainMenuBar::OnOpenRecent(wxCommandEvent& event) {
 	FileName fn(recentFiles.GetHistoryFile(event.GetId() - recentFiles.GetBaseId()));
 	frame->LoadMap(fn);
@@ -908,6 +944,10 @@ void MainMenuBar::OnReloadDataFiles(wxCommandEvent& WXUNUSED(event)) {
 	g_gui.LoadVersion(g_gui.GetCurrentVersionID(), error, warnings, true);
 	g_gui.PopupDialog("Error", error, wxOK);
 	g_gui.ListDialog("Warnings", warnings);
+}
+
+void MainMenuBar::OnReloadRevScripts(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.ReloadRevScripts();
 }
 
 void MainMenuBar::OnListExtensions(wxCommandEvent& WXUNUSED(event)) {
@@ -1268,13 +1308,13 @@ namespace OnSearchForStuff {
 						label << "/";
 					}
 				}
-				} else {
-					if (item->getUniqueID() > 0) {
-						label << "UID: " << item->getUniqueID() << " ";
-					}
-
+			} else {
 				if (item->getActionID() > 0) {
 					label << "AID:" << item->getActionID() << " ";
+				}
+
+				if (item->getUniqueID() > 0) {
+					label << "UID:" << item->getUniqueID() << " ";
 				}
 
 				label << wxstr(item->getName());
@@ -1563,6 +1603,29 @@ void MainMenuBar::OnBorderizeMap(wxCommandEvent& WXUNUSED(event)) {
         "Do you want to borderize the entire map? This will process the map in chunks.", wxYES | wxNO);
     if (ret == wxID_YES) {
         g_gui.GetCurrentEditor()->borderizeMap(true);
+    }
+
+    g_gui.RefreshView();
+}
+
+void MainMenuBar::OnWallizeSelection(wxCommandEvent& WXUNUSED(event)) {
+	if (!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	g_gui.GetCurrentEditor()->wallizeSelection();
+	g_gui.RefreshView();
+}
+
+void MainMenuBar::OnWallizeMap(wxCommandEvent& WXUNUSED(event)) {
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
+
+    int ret = g_gui.PopupDialog("Wallize Map", 
+        "Do you want to wallize the entire map? This will process the map in chunks.", wxYES | wxNO);
+    if (ret == wxID_YES) {
+        g_gui.GetCurrentEditor()->wallizeMap(true);
     }
 
     g_gui.RefreshView();
@@ -2717,6 +2780,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
 	g_settings.setInteger(Config::SHOW_TOWNS, IsItemChecked(MenuBar::SHOW_TOWNS));
 	g_settings.setInteger(Config::ALWAYS_SHOW_ZONES, IsItemChecked(MenuBar::ALWAYS_SHOW_ZONES));
 	g_settings.setInteger(Config::EXT_HOUSE_SHADER, IsItemChecked(MenuBar::EXT_HOUSE_SHADER));
+	g_settings.setInteger(Config::HOUSE_CUSTOM_COLORS, IsItemChecked(MenuBar::HOUSE_CUSTOM_COLORS));
 
 	g_settings.setInteger(Config::EXPERIMENTAL_FOG, IsItemChecked(MenuBar::EXPERIMENTAL_FOG));
 
@@ -2743,6 +2807,10 @@ void MainMenuBar::OnChangeFloor(wxCommandEvent& event) {
 
 void MainMenuBar::OnMinimapWindow(wxCommandEvent& event) {
 	g_gui.CreateMinimap();
+}
+
+void MainMenuBar::OnRecentBrushesWindow(wxCommandEvent& event) {
+	g_gui.ShowRecentBrushesWindow();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event) {
@@ -3333,7 +3401,66 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnShowHotkeys(wxCommandEvent& WXUNUSED(event)) {
-    g_hotkey_manager.ShowHotkeyDialog(frame);
+	g_hotkey_manager.ShowHotkeyDialog(frame);
+}
+
+void MainMenuBar::OnShowMonsterMaker(wxCommandEvent& WXUNUSED(event)) {
+	g_gui.ShowMonsterMakerWindow();
+}
+
+void MainMenuBar::OnAddNewCreature(wxCommandEvent& WXUNUSED(event)) {
+	AddCreatureDialog dialog(frame, "");
+	if (dialog.ShowModal() == wxID_OK) {
+		// Get the created creature type
+		CreatureType* createdType = dialog.GetCreatureType();
+		if (createdType) {
+			// Refresh palettes to show the new creature
+			g_gui.RefreshPalettes();
+			
+			// Find and select the newly created creature brush
+			Brush* createdBrush = nullptr;
+			const BrushMap& brushes = g_brushes.getMap();
+			for (const auto& brushPair : brushes) {
+				Brush* brush = brushPair.second;
+				if (brush && brush->isCreature()) {
+					CreatureBrush* cb = brush->asCreature();
+					if (cb && cb->getType() == createdType) {
+						createdBrush = brush;
+						break;
+					}
+				}
+			}
+			
+			// Set the creature palette as active and select the new brush
+			if (createdBrush) {
+				g_gui.SelectBrush(createdBrush);
+				g_gui.SelectPalettePage(TILESET_CREATURE);
+			}
+		}
+	}
+}
+
+void MainMenuBar::OnRefreshVisibleArea(wxCommandEvent& WXUNUSED(event)) {
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		return;
+	}
+	
+	LiveClient* client = dynamic_cast<LiveClient*>(editor->GetLiveClient());
+	if (client) {
+		client->requestVisibleRefresh();
+		g_gui.SetStatusText("Refreshing visible area...");
+	} else {
+		g_gui.SetStatusText("Refresh only available in multiplayer mode.");
+	}
+}
+
+void MainMenuBar::OnChatRegister(wxCommandEvent& WXUNUSED(event)) {
+    ChatManager::ShowRegisterDialog();
+}
+
+void MainMenuBar::OnChatConnect(wxCommandEvent& WXUNUSED(event)) {
+    ChatManager::ShowChatWindow();
 }
 
 void MainMenuBar::onServerHost(wxCommandEvent& event) {
@@ -3642,17 +3769,7 @@ void MainMenuBar::OnRefreshItems(wxCommandEvent& WXUNUSED(event)) {
     dialog.Destroy();
 }
 
-void MainMenuBar::OnGenerateIsland(wxCommandEvent& WXUNUSED(event)) {
-    if (!g_gui.IsVersionLoaded()) {
-        return;
-    }
 
-    if (MapTab* tab = g_gui.GetCurrentMapTab()) {
-        if (MapWindow* window = tab->GetView()) {
-            window->ShowIslandGeneratorDialog();
-        }
-    }
-}
 
 void MainMenuBar::OnMapValidateGround(wxCommandEvent& WXUNUSED(event)) {
     if (!g_gui.IsEditorOpen()) {
@@ -3689,3 +3806,613 @@ void MainMenuBar::OnMapSummarize(wxCommandEvent& WXUNUSED(event)) {
 	// Show the map summary window
 	g_gui.ShowMapSummaryWindow();
 }
+
+void MainMenuBar::OnMapNotes(wxCommandEvent& WXUNUSED(event)) {
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
+
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        return;
+    }
+
+    // Check if the map has a filename (has been saved)
+    if (!editor->map.hasFile()) {
+        int ret = g_gui.PopupDialog("Map Notes", 
+            "You need to save your map before creating notes.\nDo you want to save now?", 
+            wxYES | wxNO);
+            
+        if (ret == wxID_YES) {
+            g_gui.SaveMap();
+            // Check again if save was successful
+            if (!editor->map.hasFile()) {
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+
+    // Create and show the notes window
+    NotesWindow* notesWindow = new NotesWindow(frame, editor);
+    notesWindow->ShowModal();
+    notesWindow->Destroy();
+}
+
+void MainMenuBar::OnResetHouseIDs(wxCommandEvent& WXUNUSED(event)) {
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
+
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        return;
+    }
+
+    Map& map = editor->map;
+    Houses& houses = map.houses;
+
+    if (houses.count() == 0) {
+        g_gui.PopupDialog("Reset House IDs", "No houses found on the map!", wxOK);
+        return;
+    }
+
+    // Show confirmation dialog with preview
+    std::vector<std::pair<uint32_t, uint32_t>> id_changes;
+    std::vector<House*> house_list;
+    
+    // Collect all houses and sort by current ID
+    for (HouseMap::iterator it = houses.begin(); it != houses.end(); ++it) {
+        house_list.push_back(it->second);
+    }
+    
+    std::sort(house_list.begin(), house_list.end(), [](House* a, House* b) {
+        return a->getID() < b->getID();
+    });
+
+    // Calculate new IDs (sequential starting from 1)
+    for (size_t i = 0; i < house_list.size(); ++i) {
+        uint32_t old_id = house_list[i]->getID();
+        uint32_t new_id = i + 1;
+        if (old_id != new_id) {
+            id_changes.push_back(std::make_pair(old_id, new_id));
+        }
+    }
+
+    if (id_changes.empty()) {
+        g_gui.PopupDialog("Reset House IDs", "House IDs are already sequential. No changes needed!", wxOK);
+        return;
+    }
+
+    // Create dialog showing what will change
+    wxDialog* dialog = new wxDialog(frame, wxID_ANY, "Reset House IDs", 
+        wxDefaultPosition, wxSize(600, 400), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+    
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Warning text
+    wxStaticText* warning = new wxStaticText(dialog, wxID_ANY, 
+        "WARNING: This will reset house IDs to fill gaps and create continuous numbering!\n"
+        "This operation will have DATABASE CONSEQUENCES in production servers!\n"
+        "House ownership, guest lists, and items may be affected!");
+    warning->SetForegroundColour(*wxRED);
+    mainSizer->Add(warning, 0, wxALL | wxALIGN_CENTER, 10);
+
+    // Preview list
+    wxStaticText* previewLabel = new wxStaticText(dialog, wxID_ANY, "Preview of changes:");
+    mainSizer->Add(previewLabel, 0, wxALL, 5);
+    
+    wxListCtrl* previewList = new wxListCtrl(dialog, wxID_ANY, wxDefaultPosition, wxDefaultSize, 
+        wxLC_REPORT | wxLC_SINGLE_SEL);
+    previewList->AppendColumn("House Name", wxLIST_FORMAT_LEFT, 300);
+    previewList->AppendColumn("Old ID", wxLIST_FORMAT_CENTER, 80);
+    previewList->AppendColumn("New ID", wxLIST_FORMAT_CENTER, 80);
+    
+    for (const auto& change : id_changes) {
+        House* house = houses.getHouse(change.first);
+        if (house) {
+            long index = previewList->InsertItem(previewList->GetItemCount(), wxstr(house->name));
+            previewList->SetItem(index, 1, wxString::Format("%d", change.first));
+            previewList->SetItem(index, 2, wxString::Format("%d", change.second));
+        }
+    }
+    
+    mainSizer->Add(previewList, 1, wxEXPAND | wxALL, 5);
+
+    // Buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* okButton = new wxButton(dialog, wxID_OK, "Apply Changes");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    buttonSizer->Add(okButton, 0, wxALL, 5);
+    buttonSizer->Add(cancelButton, 0, wxALL, 5);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+    dialog->SetSizer(mainSizer);
+    dialog->Center();
+
+    if (dialog->ShowModal() == wxID_OK) {
+        // Apply the changes
+        g_gui.CreateLoadBar("Resetting house IDs...");
+        
+        try {
+            // Create a mapping of old ID to new ID for quick lookup
+            std::map<uint32_t, uint32_t> id_mapping;
+            for (const auto& change : id_changes) {
+                id_mapping[change.first] = change.second;
+            }
+
+            // Step 1: Convert house tiles manually (avoid multiple loading dialogs)
+            uint64_t tiles_done = 0;
+            uint64_t total_tiles = map.getTileCount();
+            
+            for (MapIterator miter = map.begin(); miter != map.end(); ++miter) {
+                if (tiles_done % 0x4000 == 0) {
+                    g_gui.SetLoadDone(int((tiles_done * 80) / total_tiles), "Converting house tiles...");
+                }
+                
+                Tile* tile = (*miter)->get();
+                if (tile && tile->isHouseTile()) {
+                    uint32_t old_house_id = tile->getHouseID();
+                    auto it = id_mapping.find(old_house_id);
+                    if (it != id_mapping.end()) {
+                        tile->setHouseID(it->second);
+                    }
+                }
+                ++tiles_done;
+            }
+
+            // Step 2: Update house objects themselves
+            g_gui.SetLoadDone(90, "Updating house registry...");
+            
+            // We need to be careful here to avoid iterator invalidation
+            std::vector<House*> houses_to_update;
+            for (const auto& change : id_changes) {
+                House* house = houses.getHouse(change.first);
+                if (house) {
+                    houses_to_update.push_back(house);
+                }
+            }
+            
+            for (House* house : houses_to_update) {
+                uint32_t old_id = house->getID();
+                // Find the new ID for this house
+                for (const auto& change : id_changes) {
+                    if (change.first == old_id) {
+                        houses.changeId(house, change.second);
+                        break;
+                    }
+                }
+            }
+
+            g_gui.SetLoadDone(100);
+            g_gui.DestroyLoadBar();
+            
+            // Mark map as modified
+            map.doChange();
+            
+            wxString msg;
+            msg << "Successfully reset " << id_changes.size() << " house IDs!\n"
+                << "House IDs are now sequential from 1 to " << house_list.size() << ".";
+            g_gui.PopupDialog("Reset House IDs", msg, wxOK);
+            
+            // Refresh the view and palettes
+            g_gui.RefreshView();
+            g_gui.RefreshPalettes();
+            
+        } catch (...) {
+            g_gui.DestroyLoadBar();
+            g_gui.PopupDialog("Error", "An error occurred while resetting house IDs!", wxOK | wxICON_ERROR);
+        }
+    }
+
+    dialog->Destroy();
+}
+
+void MainMenuBar::OnResetTownIDs(wxCommandEvent& WXUNUSED(event)) {
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
+
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        return;
+    }
+
+    Map& map = editor->map;
+    Towns& towns = map.towns;
+
+    if (towns.count() == 0) {
+        g_gui.PopupDialog("Reset Town IDs", "No towns found on the map!", wxOK);
+        return;
+    }
+
+    // Show confirmation dialog with preview
+    std::vector<std::pair<uint32_t, uint32_t>> id_changes;
+    std::vector<Town*> town_list;
+    
+    // Collect all towns and sort by current ID
+    for (TownMap::iterator it = towns.begin(); it != towns.end(); ++it) {
+        town_list.push_back(it->second);
+    }
+    
+    std::sort(town_list.begin(), town_list.end(), [](Town* a, Town* b) {
+        return a->getID() < b->getID();
+    });
+
+    // Calculate new IDs (sequential starting from 1)
+    for (size_t i = 0; i < town_list.size(); ++i) {
+        uint32_t old_id = town_list[i]->getID();
+        uint32_t new_id = i + 1;
+        if (old_id != new_id) {
+            id_changes.push_back(std::make_pair(old_id, new_id));
+        }
+    }
+
+    if (id_changes.empty()) {
+        g_gui.PopupDialog("Reset Town IDs", "Town IDs are already sequential. No changes needed!", wxOK);
+        return;
+    }
+
+    // Create dialog showing what will change
+    wxDialog* dialog = new wxDialog(frame, wxID_ANY, "Reset Town IDs", 
+        wxDefaultPosition, wxSize(600, 400), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+    
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Warning text
+    wxStaticText* warning = new wxStaticText(dialog, wxID_ANY, 
+        "WARNING: This will reset town IDs to fill gaps and create continuous numbering!\n"
+        "This operation will have DATABASE CONSEQUENCES in production servers!\n"
+        "All houses belonging to these towns will be updated to use the new town IDs!");
+    warning->SetForegroundColour(*wxRED);
+    mainSizer->Add(warning, 0, wxALL | wxALIGN_CENTER, 10);
+
+    // Preview list
+    wxStaticText* previewLabel = new wxStaticText(dialog, wxID_ANY, "Preview of changes:");
+    mainSizer->Add(previewLabel, 0, wxALL, 5);
+    
+    wxListCtrl* previewList = new wxListCtrl(dialog, wxID_ANY, wxDefaultPosition, wxDefaultSize, 
+        wxLC_REPORT | wxLC_SINGLE_SEL);
+    previewList->AppendColumn("Town Name", wxLIST_FORMAT_LEFT, 300);
+    previewList->AppendColumn("Old ID", wxLIST_FORMAT_CENTER, 80);
+    previewList->AppendColumn("New ID", wxLIST_FORMAT_CENTER, 80);
+    previewList->AppendColumn("Houses", wxLIST_FORMAT_CENTER, 80);
+    
+    for (const auto& change : id_changes) {
+        Town* town = towns.getTown(change.first);
+        if (town) {
+            // Count houses in this town
+            int house_count = 0;
+            for (HouseMap::iterator house_iter = map.houses.begin(); 
+                 house_iter != map.houses.end(); ++house_iter) {
+                if (house_iter->second->townid == change.first) {
+                    house_count++;
+                }
+            }
+            
+            long index = previewList->InsertItem(previewList->GetItemCount(), wxstr(town->getName()));
+            previewList->SetItem(index, 1, wxString::Format("%d", change.first));
+            previewList->SetItem(index, 2, wxString::Format("%d", change.second));
+            previewList->SetItem(index, 3, wxString::Format("%d", house_count));
+        }
+    }
+    
+    mainSizer->Add(previewList, 1, wxEXPAND | wxALL, 5);
+
+    // Buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* okButton = new wxButton(dialog, wxID_OK, "Apply Changes");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    buttonSizer->Add(okButton, 0, wxALL, 5);
+    buttonSizer->Add(cancelButton, 0, wxALL, 5);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+    dialog->SetSizer(mainSizer);
+    dialog->Center();
+
+    if (dialog->ShowModal() == wxID_OK) {
+        // Apply the changes
+        g_gui.CreateLoadBar("Resetting town IDs...");
+        
+        try {
+            // Create a mapping of old ID to new ID for quick lookup
+            std::map<uint32_t, uint32_t> id_mapping;
+            for (const auto& change : id_changes) {
+                id_mapping[change.first] = change.second;
+            }
+
+            // Step 1: Update all houses that belong to these towns
+            g_gui.SetLoadDone(25, "Updating houses with new town IDs...");
+            
+            for (HouseMap::iterator house_iter = map.houses.begin(); 
+                 house_iter != map.houses.end(); ++house_iter) {
+                House* house = house_iter->second;
+                auto it = id_mapping.find(house->townid);
+                if (it != id_mapping.end()) {
+                    house->townid = it->second;
+                }
+            }
+
+            // Step 2: Update town objects themselves
+            g_gui.SetLoadDone(75, "Updating town registry...");
+            
+            // We need to be careful here to avoid iterator invalidation
+            std::vector<Town*> towns_to_update;
+            for (const auto& change : id_changes) {
+                Town* town = towns.getTown(change.first);
+                if (town) {
+                    towns_to_update.push_back(town);
+                }
+            }
+            
+            for (Town* town : towns_to_update) {
+                uint32_t old_id = town->getID();
+                // Find the new ID for this town
+                for (const auto& change : id_changes) {
+                    if (change.first == old_id) {
+                        towns.changeId(town, change.second);
+                        break;
+                    }
+                }
+            }
+
+            g_gui.SetLoadDone(100);
+            g_gui.DestroyLoadBar();
+            
+            // Mark map as modified
+            map.doChange();
+            
+            wxString msg;
+            msg << "Successfully reset " << id_changes.size() << " town IDs!\n"
+                << "Town IDs are now sequential from 1 to " << town_list.size() << ".";
+            g_gui.PopupDialog("Reset Town IDs", msg, wxOK);
+            
+            // Refresh the view and palettes
+            g_gui.RefreshView();
+            g_gui.RefreshPalettes();
+            
+        } catch (...) {
+            g_gui.DestroyLoadBar();
+            g_gui.PopupDialog("Error", "An error occurred while resetting town IDs!", wxOK | wxICON_ERROR);
+        }
+    }
+
+    dialog->Destroy();
+}
+
+void MainMenuBar::OnDoodadsFillingTool(wxCommandEvent& WXUNUSED(event)) {
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
+
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        return;
+    }
+
+    Map& map = editor->map;
+
+    // Show the doodads filling dialog
+    DoodadsFillingDialog dialog(frame, "Doodads Filling Tool");
+    
+    if (dialog.ShowModal() == wxID_OK) {
+        // Get configuration from dialog
+        wxString tileRangesStr = dialog.GetTileRanges();
+        std::vector<DoodadsFillingDialog::DoodadItem> doodadItems = dialog.GetDoodadItems();
+        int clumping = dialog.GetClumping();
+        double clumpingFactor = dialog.GetClumpingFactor();
+        int spacing = dialog.GetSpacing();
+        bool placeOnSelection = dialog.GetPlaceOnSelection();
+        
+        // Parse tile ranges
+        std::string rangesStr = std::string(tileRangesStr.mb_str());
+        std::vector<std::pair<uint16_t, uint16_t>> tileRanges = parseIdRangesString(rangesStr);
+        
+        if (tileRanges.empty() || doodadItems.empty()) {
+            return;
+        }
+        
+        // Calculate total chance for weighted random selection
+        int totalChance = 0;
+        for (const auto& item : doodadItems) {
+            totalChance += item.chance;
+        }
+        
+        if (totalChance <= 0) {
+            g_gui.PopupDialog("Error", "Total doodad chances must be greater than 0!", wxOK | wxICON_ERROR);
+            return;
+        }
+        
+        // Start the placement process
+        g_gui.CreateLoadBar("Placing doodads...");
+        
+        try {
+            BatchAction* batch = editor->actionQueue->createBatch(ACTION_DRAW);
+            Action* action = editor->actionQueue->createAction(batch);
+            
+            std::vector<Position> candidateTiles;
+            std::vector<Position> placedPositions;
+            int itemsPlaced = 0;
+            long long totalTiles = 0;
+            long long processedTiles = 0;
+            
+            // First pass: collect all candidate tiles
+            g_gui.SetLoadDone(10, "Finding candidate tiles...");
+            
+            if (placeOnSelection && editor->selection.size() > 0) {
+                // Search within selection
+                for (TileSet::iterator it = editor->selection.begin(); it != editor->selection.end(); ++it) {
+                    Tile* tile = *it;
+                    if (tile && tile->ground) {
+                        uint16_t groundId = tile->ground->getID();
+                        if (isIdInRanges(groundId, tileRanges)) {
+                            candidateTiles.push_back(tile->getPosition());
+                        }
+                    }
+                    totalTiles++;
+                }
+            } else {
+                // Search entire map
+                totalTiles = map.getTileCount();
+                long long checked = 0;
+                
+                for (MapIterator it = map.begin(); it != map.end(); ++it) {
+                    Tile* tile = (*it)->get();
+                    if (tile && tile->ground) {
+                        uint16_t groundId = tile->ground->getID();
+                        if (isIdInRanges(groundId, tileRanges)) {
+                            candidateTiles.push_back(tile->getPosition());
+                        }
+                    }
+                    
+                    checked++;
+                    if (checked % 10000 == 0) {
+                        g_gui.SetLoadDone(10 + (checked * 40 / totalTiles), "Finding candidate tiles...");
+                    }
+                }
+            }
+            
+            if (candidateTiles.empty()) {
+                g_gui.DestroyLoadBar();
+                g_gui.PopupDialog("No Tiles Found", "No tiles matching the specified ranges were found!", wxOK | wxICON_INFORMATION);
+                return;
+            }
+            
+            g_gui.SetLoadDone(50, "Placing doodads...");
+            
+            // Initialize random seed
+            srand(static_cast<unsigned int>(time(nullptr)));
+            
+            // Second pass: place doodads with spacing and clumping logic
+            for (size_t i = 0; i < candidateTiles.size(); ++i) {
+                Position pos = candidateTiles[i];
+                
+                // Check spacing constraint
+                bool tooClose = false;
+                for (const Position& placedPos : placedPositions) {
+                    int dx = abs(pos.x - placedPos.x);
+                    int dy = abs(pos.y - placedPos.y);
+                    int dz = abs(pos.z - placedPos.z);
+                    
+                    // Consider z-level differences as well
+                    int distance = std::max({dx, dy, dz});
+                    if (distance < spacing) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                
+                if (tooClose) {
+                    continue;
+                }
+                
+                // Apply clumping logic
+                double placementChance = clumping / 100.0;
+                
+                // Modify chance based on proximity to already placed items (clumping factor)
+                if (!placedPositions.empty() && clumpingFactor > 1.0) {
+                    // Find closest placed item
+                    double minDistance = DBL_MAX;
+                    for (const Position& placedPos : placedPositions) {
+                        double dx = pos.x - placedPos.x;
+                        double dy = pos.y - placedPos.y;
+                        double distance = sqrt(dx*dx + dy*dy);
+                        minDistance = std::min(minDistance, distance);
+                    }
+                    
+                    // Increase chance if close to other placed items
+                    if (minDistance < 10.0) { // Within 10 tiles
+                        placementChance *= clumpingFactor * (10.0 - minDistance) / 10.0;
+                    }
+                }
+                
+                // Random placement check
+                if ((rand() % 100) >= (placementChance * 100)) {
+                    continue;
+                }
+                
+                // Select a random doodad item based on weights
+                int randomChance = rand() % totalChance;
+                int currentChance = 0;
+                uint16_t selectedItemId = 0;
+                
+                for (const auto& item : doodadItems) {
+                    currentChance += item.chance;
+                    if (randomChance < currentChance) {
+                        selectedItemId = item.id;
+                        break;
+                    }
+                }
+                
+                if (selectedItemId == 0) {
+                    continue;
+                }
+                
+                // Place the item
+                Tile* tile = map.getTile(pos);
+                if (tile) {
+                    Item* newItem = Item::Create(selectedItemId);
+                    if (newItem) {
+                        // Create a copy of the tile for modification
+                        Tile* newTile = tile->deepCopy(map);
+                        newTile->addItem(newItem);
+                        action->addChange(newd Change(newTile));
+                        placedPositions.push_back(pos);
+                        itemsPlaced++;
+                    }
+                }
+                
+                // Update progress
+                if (i % 1000 == 0) {
+                    int progress = 50 + (i * 45 / candidateTiles.size());
+                    g_gui.SetLoadDone(progress, wxString::Format("Placing doodads... (%d placed)", itemsPlaced));
+                }
+            }
+            
+            g_gui.SetLoadDone(100);
+            g_gui.DestroyLoadBar();
+            
+            // Commit the action
+            editor->actionQueue->addBatch(batch);
+            
+            // Show results
+            wxString message = wxString::Format(
+                "Doodads filling completed!\n\n"
+                "Candidate tiles found: %zu\n"
+                "Items placed: %d\n"
+                "Placement success rate: %.1f%%",
+                candidateTiles.size(),
+                itemsPlaced,
+                candidateTiles.empty() ? 0.0 : (itemsPlaced * 100.0 / candidateTiles.size())
+            );
+            
+            g_gui.PopupDialog("Doodads Filling Complete", message, wxOK | wxICON_INFORMATION);
+            
+            // Refresh the view
+            g_gui.RefreshView();
+            
+        } catch (const std::exception& e) {
+            g_gui.DestroyLoadBar();
+            wxString errorMsg = wxString::Format("Error during doodads placement: %s", e.what());
+            g_gui.PopupDialog("Error", errorMsg, wxOK | wxICON_ERROR);
+        } catch (...) {
+            g_gui.DestroyLoadBar();
+            g_gui.PopupDialog("Error", "An unknown error occurred during doodads placement!", wxOK | wxICON_ERROR);
+        }
+    }
+}
+
+void MainMenuBar::OnEditItemsOTB(wxCommandEvent& WXUNUSED(event)) {
+	// Check if items are loaded
+	if (!g_gui.IsVersionLoaded()) {
+		wxMessageBox("Please load a client version first.", "No Version Loaded", wxOK | wxICON_WARNING, frame);
+		return;
+	}
+
+	// Create and show the item editor window
+	ItemEditorWindow* itemEditor = new ItemEditorWindow(frame);
+	itemEditor->ShowModal();
+	itemEditor->Destroy();
+}
+

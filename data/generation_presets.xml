@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GenerationPresets>
+  <Preset name="Custom Preset" type="0" width="256" height="256" version="10.98">
+    <IslandConfig noise_scale="0.010000" noise_octaves="0" noise_persistence="0.500" noise_lacunarity="2.000" island_size="0.800" island_falloff="2.000" island_threshold="0.300" water_level="0.500" water_id="4608" ground_id="4526" enable_cleanup="1" min_land_patch_size="4" max_water_hole_size="3" smoothing_passes="2"/>
+  </Preset>
+  <Preset name="small isle round" type="0" width="256" height="256" version="10.98">
+    <IslandConfig noise_scale="0.025600" noise_octaves="0" noise_persistence="0.490" noise_lacunarity="3.000" island_size="1.700" island_falloff="4.000" island_threshold="0.440" water_level="0.634" water_id="4608" ground_id="4526" enable_cleanup="1" min_land_patch_size="4" max_water_hole_size="3" smoothing_passes="2"/>
+  </Preset>
+  <Preset name="large island" type="0" width="256" height="256" version="10.98">
+    <IslandConfig noise_scale="0.027700" noise_octaves="0" noise_persistence="0.660" noise_lacunarity="3.000" island_size="2.000" island_falloff="3.000" island_threshold="0.440" water_level="0.634" water_id="4608" ground_id="4526" enable_cleanup="1" min_land_patch_size="4" max_water_hole_size="3" smoothing_passes="2"/>
+  </Preset>
+</GenerationPresets>

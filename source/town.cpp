@@ -58,6 +58,17 @@ uint32_t Towns::getEmptyID() {
 	return empty + 1;
 }
 
+void Towns::changeId(Town* town, uint32_t newID) {
+	ASSERT(town);
+	TownMap::iterator it = towns.find(town->getID());
+	if (it != towns.end()) {
+		towns.erase(it);
+	}
+
+	town->setID(newID);
+	towns[newID] = town;
+}
+
 Town* Towns::getTown(std::string& name) {
 	for (TownMap::iterator it = begin(); it != end(); ++it) {
 		if (it->second->getName() == name) {

@@ -111,6 +111,7 @@ namespace Config {
 		ASSETS_DATA_DIRS,
 		DEFAULT_CLIENT_VERSION,
 		CHECK_SIGNATURES,
+		FORCE_CLIENT_ITEMS_OTB,
 
 		CURSOR_RED,
 		CURSOR_GREEN,
@@ -159,6 +160,8 @@ namespace Config {
 		RECENT_EDITED_MAP_PATH,
 		RECENT_EDITED_MAP_POSITION,
 
+		OTS_DATA_DIRECTORY,
+
 		FIND_ITEM_MODE,
 		JUMP_TO_ITEM_MODE,
 
@@ -190,6 +193,7 @@ namespace Config {
 		AUTO_SELECT_RAW_ON_RIGHTCLICK,
 		AUTO_SAVE_ENABLED,
 		AUTO_SAVE_INTERVAL,
+		SUPPRESS_MAP_WARNINGS,
 
 		// Network/Live settings
 		LIVE_HOST,
@@ -226,6 +230,46 @@ namespace Config {
 
 		// Website link control setting
 		LAST_WEBSITES_OPEN_TIME,
+
+		TOOLTIP_IGNORE_IDS,         // string: e.g. "658-660,6891,136"
+		TOOLTIP_SHOW,               // bool: master switch
+		TOOLTIP_SHOW_HASSCRIPT,     // bool: show hasScript
+		TOOLTIP_SHOW_TEXT,          // bool: show text
+		TOOLTIP_SHOW_ITEMID,         // bool: show item ID in tooltips
+		TOOLTIP_SHOW_AID,             // bool: show action ID in tooltips
+		TOOLTIP_SHOW_UID,             // bool: show unique ID in tooltips
+		TOOLTIP_SHOW_DOORID,          // bool: show door ID in tooltips
+		TOOLTIP_SHOW_DESTINATION,     // bool: show teleport destination in tooltips
+		TOOLTIP_SHOW_HOUSEID,         // bool: show house ID in tooltips
+		HOUSE_CUSTOM_COLORS,          // bool: use house ID colors to color house tiles
+		
+		REFRESH_RADIUS,               // int: radius for visible area refresh in multiplayer
+
+		// Invisible Items Color Settings
+		INVISIBLE_ITEMS_ENABLE_CUSTOM,    // bool: enable custom invisible item colors
+		INVISIBLE_INVALID_RED,            // int: red component for invalid items (id=0)
+		INVISIBLE_INVALID_GREEN,          // int: green component for invalid items (id=0)
+		INVISIBLE_INVALID_BLUE,           // int: blue component for invalid items (id=0)
+		INVISIBLE_STAIRS_RED,             // int: red component for invisible stairs (469)
+		INVISIBLE_STAIRS_GREEN,           // int: green component for invisible stairs (469)
+		INVISIBLE_STAIRS_BLUE,            // int: blue component for invisible stairs (469)
+		INVISIBLE_WALKABLE_RED,           // int: red component for invisible walkable tiles
+		INVISIBLE_WALKABLE_GREEN,         // int: green component for invisible walkable tiles
+		INVISIBLE_WALKABLE_BLUE,          // int: blue component for invisible walkable tiles
+		INVISIBLE_WALL_RED,               // int: red component for invisible walls (2187)
+		INVISIBLE_WALL_GREEN,             // int: green component for invisible walls (2187)
+		INVISIBLE_WALL_BLUE,              // int: blue component for invisible walls (2187)
+		INVISIBLE_CUSTOM_IDS,             // string: custom invisible item IDs (e.g. "1234:255,0,0;5678:0,255,0")
+
+		// Client Box Settings
+		INGAME_BOX_CUSTOM_SIZE_ENABLED,   // bool: enable custom client box size
+		INGAME_BOX_WIDTH,                 // int: custom client box width (default 17)
+		INGAME_BOX_HEIGHT,                // int: custom client box height (default 13)
+		INGAME_BOX_OFFSET_X,              // int: custom X border offset (default 0)
+		INGAME_BOX_OFFSET_Y,              // int: custom Y border offset (default 2)
+
+		// Depot auto-assignment settings
+		AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE,  // bool: auto-assign depot town ID to closest temple
 
 		LAST,
 	};

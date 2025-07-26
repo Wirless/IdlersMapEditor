@@ -670,55 +670,36 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 }
 
 void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
-	// Add recursion guard
-	if (!tile || processing_tiles.find(tile->getPosition()) != processing_tiles.end()) {
+	// Add debugging output for border operation
+	char debug_msg[512];
+	sprintf(debug_msg, "DEBUG DRAG: GroundBrush::doBorders called on tile at pos=(%d,%d,%d)\n", 
+		tile->getPosition().x, tile->getPosition().y, tile->getPosition().z);
+	OutputDebugStringA(debug_msg);
+	
+	// Prevent infinite recursion
+	if (processing_tiles.count(tile->getPosition()) > 0) {
+		sprintf(debug_msg, "DEBUG DRAG: Preventing recursion for tile at pos=(%d,%d,%d)\n", 
+			tile->getPosition().x, tile->getPosition().y, tile->getPosition().z);
+		OutputDebugStringA(debug_msg);
 		return;
 	}
 	processing_tiles.insert(tile->getPosition());
 	
-	// Early exit for custom border mode
-	if (g_settings.getBoolean(Config::CUSTOM_BORDER_ENABLED) && g_settings.getBoolean(Config::USE_AUTOMAGIC)) {
-		// Get the custom border ID
+	if (!tile || !tile->ground) {
+		OutputDebugStringA("DEBUG DRAG: doBorders called on tile with no ground, skipping\n");
+		return;
+	}
+		
+	// Check if custom border is enabled and apply it
+	if (g_settings.getBoolean(Config::CUSTOM_BORDER_ENABLED)) {
 		int customBorderId = g_settings.getInteger(Config::CUSTOM_BORDER_ID);
-		if (customBorderId <= 0) {
-			// Invalid border ID, fall back to normal border handling
-			processing_tiles.erase(tile->getPosition());
-			return;
-		}
+		sprintf(debug_msg, "DEBUG DRAG: Using custom border ID: %d\n", customBorderId);
+		OutputDebugStringA(debug_msg);
 		
-		// Check if we need to clean existing borders
-		if (g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER)) {
-			// Only clean borders matching the custom border ID
-			ItemVector::iterator it = tile->items.begin();
-			while (it != tile->items.end()) {
-				if ((*it)->isBorder()) {
-					// Go through all borders in the map and check if this item matches any
-					bool found = false;
-					for (auto& borderPair : g_brushes.borders) {
-						if (borderPair.second && borderPair.second->hasItemId((*it)->getID())) {
-							found = true;
-							break;
-						}
-					}
-					
-					if (found) {
-						delete *it;
-						it = tile->items.erase(it);
-					} else {
-						++it;
-					}
-				} else {
-					++it;
-				}
-			}
-		} else {
-			// Clean all borders
-			tile->cleanBorders();
-		}
-		
-		// Look up the border in the borders container
 		auto it = g_brushes.borders.find(customBorderId);
 		if (it == g_brushes.borders.end() || !it->second) {
+			sprintf(debug_msg, "DEBUG DRAG: Custom border ID %d not found\n", customBorderId);
+			OutputDebugStringA(debug_msg);
 			processing_tiles.erase(tile->getPosition());
 			return; // Border ID not found
 		}
@@ -730,6 +711,9 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 		uint32_t x = position.x;
 		uint32_t y = position.y;
 		uint32_t z = position.z;
+		
+		sprintf(debug_msg, "DEBUG DRAG: Processing neighbors for tile at (%u,%u,%u)\n", x, y, z);
+		OutputDebugStringA(debug_msg);
 		
 		// Check the 8 surrounding tiles for ground, to apply borders where there's no ground
 		// We mark each position as true if it needs a border (no ground or different ground)
@@ -784,6 +768,17 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 			}
 		}
 		
+		sprintf(debug_msg, "DEBUG DRAG: Calculated tiledata=%u (0x%X) for custom border\n", tiledata, tiledata);
+		OutputDebugStringA(debug_msg);
+		
+		// Check for potential division by zero in border_types lookup
+		if (tiledata >= 256) {
+			sprintf(debug_msg, "DEBUG DRAG: ERROR! tiledata %u >= 256, this could cause buffer overflow!\n", tiledata);
+			OutputDebugStringA(debug_msg);
+			processing_tiles.erase(tile->getPosition());
+			return;
+		}
+		
 		// Border to terrain conversion - this is the logic for determining which
 		// borders to draw based on the surrounding tiles
 		BorderType directions[4] = {
@@ -792,6 +787,10 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 			static_cast<BorderType>((border_types[tiledata] & 0x00FF0000) >> 16),
 			static_cast<BorderType>((border_types[tiledata] & 0xFF000000) >> 24)
 		};
+		
+		sprintf(debug_msg, "DEBUG DRAG: Border directions: [%d,%d,%d,%d]\n", 
+			directions[0], directions[1], directions[2], directions[3]);
+		OutputDebugStringA(debug_msg);
 		
 		// Apply the appropriate borders
 		for (int i = 0; i < 4; ++i) {
@@ -1403,6 +1402,11 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile) {
 
 // Add a custom method to reset borderize for the auto-magic behavior
 void GroundBrush::reborderizeTile(BaseMap* map, Tile* tile) {
+	if (!tile || !tile->ground) {
+		OutputDebugStringA("DEBUG DRAG: reborderizeTile called on tile with no ground, skipping\n");
+		return;
+	}
+
 	// First, clean any existing borders on the tile
 	if (g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER)) {
 		// When Same Ground Type Border is enabled, we need to identify and remove

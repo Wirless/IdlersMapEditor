@@ -344,6 +344,7 @@ public:
 protected:
 	void BuildListBox(bool doselect);
 	void UpdateSelection(int new_selection);
+	void SynchronizeWithMap();
 	void ExportTownsToXML(const wxString& path);
 	void ImportTownsFromXML(const wxString& path);
 	void ExportTownToXML(const wxString& path, Town* town);

@@ -34,7 +34,7 @@
 		<item name="Open..." hotkey="Ctrl+O" action="OPEN" help="Open another map."/>
 		<item name="Save" hotkey="Ctrl+S" action="SAVE" help="Save the current map."/>
 		<item name="Save As..." hotkey="Ctrl+Alt+S" action="SAVE_AS" help="Save the current map as a new file."/>
-		<item name="Generate Map" action="GENERATE_MAP" help="Generate a new map."/>
+	
 		<item name="Close" hotkey="Ctrl+Q" action="CLOSE" help="Closes the currently open map."/>
 		<separator/>
 		<menu name="Import">
@@ -47,6 +47,7 @@
 		</menu>
 		<menu name="Reload">
 			<item name="Reload" hotkey="F5" action="RELOAD_DATA" help="Reloads all data files."/>
+			<item name="Reload RevScripts" action="RELOAD_REVSCRIPTS" help="Reloads RevScript files for the current map."/>
 		</menu>
 		<separator/>
 		<menu name="Recent Files" special="RECENT_FILES"/>
@@ -65,6 +66,8 @@
 			<separator/>
 			<item name="Borderize Selection" hotkey="Ctrl+B" action="BORDERIZE_SELECTION" help="Creates automatic borders in the entire selected area."/>
 			<item name="Borderize Map" action="BORDERIZE_MAP" help="Reborders the entire map."/>
+			<item name="Wallize Selection" hotkey="Ctrl+W" action="WALLIZE_SELECTION" help="Creates automatic walls in the entire selected area."/>
+			<item name="Wallize Map" action="WALLIZE_MAP" help="Rewallizes the entire map."/>
 			<item name="Randomize Selection" action="RANDOMIZE_SELECTION" help="Randomizes the ground tiles of the selected area."/>
 			<item name="Randomize Map" action="RANDOMIZE_MAP" help="Randomizes all tiles of the entire map."/>
 		</menu>
@@ -83,7 +86,6 @@
 	</menu>
 	<menu name="Editor">
 		<item name="New View" hotkey="Ctrl+Shift+N" action="NEW_VIEW" help="Creates a new view of the current map."/>
-		<item name="New Detached View" hotkey="Ctrl+Shift+D" action="NEW_DETACHED_VIEW" help="Creates a new detached view of the current map that can be moved to another monitor."/>
 		<item name="Enter Fullscreen" hotkey="F11" action="TOGGLE_FULLSCREEN" help="Changes between fullscreen mode and windowed mode."/>
 		<item name="Take Screenshot" hotkey="F10" action="TAKE_SCREENSHOT" help="Saves the current view to the disk."/>
 		<separator/>
@@ -110,6 +112,7 @@
 		<separator/>
 		<item name="Cleanup..." action="MAP_CLEANUP" help="Removes all items that do not exist in the OTB file (red tiles the server can't load)."/>
 		<item name="Summarize" hotkey="Ctrl+Shift+S" action="MAP_SUMMARIZE" help="Show a summary of all items on the map with their counts."/>
+		
 		<item name="Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
 		<item name="Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
 	</menu>
@@ -137,6 +140,7 @@
 		</menu>
 		<separator/>
 		<item name="Borderize Selection" hotkey="Ctrl+B" action="BORDERIZE_SELECTION" help="Creates automatic borders in the entire selected area."/>
+		<item name="Wallize Selection" hotkey="Ctrl+W" action="WALLIZE_SELECTION" help="Creates automatic walls in the entire selected area."/>
 		<item name="Randomize Selection" action="RANDOMIZE_SELECTION" help="Randomizes the ground tiles of the selected area."/>
 	</menu>
 	<menu name="View">
@@ -154,6 +158,8 @@
 		<item name="Ghost loose items" hotkey="G" action="GHOST_ITEMS" help="Ghost items (except ground)."/>
 		<item name="Ghost higher floors" hotkey="Ctrl+L" action="GHOST_HIGHER_FLOORS" help="Ghost floors."/>
 		<item name="Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>
+		<separator/>
+		<item name="Use house colors" hotkey="" action="HOUSE_CUSTOM_COLORS" help="Color house tiles based on house ID. Colors all items on house tiles."/>
 	</menu>
 	<menu name="Show">
 		<item name="Show Animation" hotkey="L" action="SHOW_PREVIEW" help="Show item animations."/>
@@ -178,6 +184,7 @@
 		<item name="Go to Previous Position" hotkey="P" action="GOTO_PREVIOUS_POSITION" help="Go to the previous screen center position."/>
 		<item name="Jump to Brush..." hotkey="J" action="JUMP_TO_BRUSH" help="Jump to a brush."/>
 		<item name="Jump to Item..." hotkey="Ctrl+J" action="JUMP_TO_ITEM_BRUSH" help="Jump to an item brush (RAW palette)."/>
+		<item name="Refresh Visible Area" hotkey="F6" action="MENU_REFRESH_VISIBLE_AREA" help="Refresh the visible area to show latest changes from server."/>
 		<separator/>
 		<menu name="Floor">
 			<item name="Floor 0" action="FLOOR_0" help=""/>
@@ -200,6 +207,7 @@
 	</menu>
 	<menu name="Window">
 		<item name="Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
+	
 		<item name="New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
 		
 		<menu name="Palette">
@@ -236,6 +244,8 @@
 	<!-- all context menus that have been changed from vanilla functionalities -->
 		<item name="Hotkeys" hotkey="" action="SHOW_HOTKEYS" help="Hotkeys"/>
 		<separator/>
+		
+		
 		<item name="Remove Items by ID..." action="MAP_REMOVE_ITEMS" help="Removes all items with the selected ID from the map."/>
 			<item name="Remove Duplicates..." action="MAP_REMOVE_DUPLICATES" help="Removes all duplicate items from the map."/>
 			<item name="Remove all Corpses..." action="MAP_REMOVE_CORPSES" help="Removes all corpses from the map."/>
@@ -248,9 +258,33 @@
 		<item name="Replace Items..." hotkey="" action="REPLACE_ITEMS" help="Replaces all occurrences of one item with another."/>
 		<item name="Refresh Items" action="REFRESH_ITEMS" help="Refresh items to fix flags"/>
 		<!-- clickable buttons that toggle some settings such as select right click RAw toggle button and toggle button to disable map display right click context menu then.-->
-			<separator/>
-		<item name="Generate Procedural Map..." action="GENERATE_PROCEDURAL_MAP" help="Generate a procedural map using OTMapGen"/>
+				<separator/>
+	
+<item name="Notes..." hotkey="Ctrl+N" action="MAP_NOTES" help="Create or edit notes for this map."/>
+	<item name="Recent Brushes" hotkey="Shift+ALT+R" action="WIN_RECENT_BRUSHES" help="Shows recently used brushes for quick access."/>
+	<separator/>
+		<item name="Monster Maker" hotkey="" action="SHOW_MONSTER_MAKER" help="Create and edit monsters with visual interface"/>
+		<item name="Add New Creature" hotkey="" action="ADD_NEW_CREATURE" help="Create new placeable creatures for map editor"/>
 		<separator/>
-
+		<item name="Doodads Filling Tool..." hotkey="" action="DOODADS_FILLING_TOOL" help="Automatically place decorative items on selected tiles or matching terrain"/>
+		<separator/>
+		<item name="Reset House IDs" hotkey="" action="RESET_HOUSE_IDS" help="Reset house IDs to fill gaps and create continuous numbering"/>
+		<item name="Reset Town IDs" hotkey="" action="RESET_TOWN_IDS" help="Reset town IDs to fill gaps and create continuous numbering"/>
+		<separator/>
+		<item name="Edit Items (OTB)..." action="EDIT_ITEMS_OTB" help="Edit items.otb file - modify item flags, properties, and generate missing items."/>
+		<separator/>
+			<menu name="Generate">
+			<item name="Procedural Map..." action="GENERATE_PROCEDURAL_MAP" help="Generate a procedural map with terrain layers."/>
+			<item name="Island Map..." action="GENERATE_ISLAND_MAP" help="Generate an island map."/>
+			<item name="Dungeon Map..." action="GENERATE_DUNGEON_MAP" help="Generate a dungeon map."/>
+		</menu>
+		<separator/>
+		<item name="New Detached View" hotkey="Ctrl+Shift+D" action="NEW_DETACHED_VIEW" help="Creates a new detached view of the current map that can be moved to another monitor."/>
+		<separator/>
+		
+	</menu>
+		<menu name="Chat">
+		<item name="Register" action="CHAT_REGISTER" help="Register a new chat account" />
+		<item name="Connect" action="CHAT_CONNECT" help="Connect to the chat server" />
 	</menu>
 </menubar>

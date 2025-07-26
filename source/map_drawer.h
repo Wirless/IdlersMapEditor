@@ -167,6 +167,12 @@ public:
 	}
 
 	FinderPosition findClosestToCenter(const std::vector<FinderPosition>& zone) {
+		// CRITICAL FIX: Prevent division by zero when zone is empty
+		if (zone.empty()) {
+			// Return a default position if zone is empty
+			return { 0, 0, 0 };
+		}
+		
 		FinderPosition centroid = { 0, 0, 0 };
 		for (const auto& pos : zone) {
 			centroid.x += pos.x;
@@ -174,12 +180,16 @@ public:
 			centroid.z += pos.z;
 		}
 
-		centroid.x /= zone.size();
-		centroid.y /= zone.size();
-		centroid.z /= zone.size();
+		// Safe division with size check
+		size_t zone_size = zone.size();
+		if (zone_size > 0) {
+			centroid.x /= zone_size;
+			centroid.y /= zone_size;
+			centroid.z /= zone_size;
+		}
 
 		double minDistance = std::numeric_limits<double>::max();
-		FinderPosition closestPosition;
+		FinderPosition closestPosition = zone[0]; // Use first position as default
 		for (const auto& pos : zone) {
 			const double dist = pos.distance(centroid);
 			if (dist < minDistance) {
@@ -190,6 +200,44 @@ public:
 
 		return closestPosition;
 	}
+};
+
+// Manages custom colors for invisible items
+class InvisibleItemsColorManager {
+public:
+	struct Color {
+		int red, green, blue;
+		Color(int r = 255, int g = 255, int b = 255) : red(r), green(g), blue(b) {}
+	};
+
+	// Load settings from configuration
+	static void LoadFromSettings();
+
+	// Reload settings from configuration (useful when preferences change)
+	static void ReloadFromSettings();
+
+	// Get color for specific client ID, returns true if custom color is found
+	static bool GetCustomColor(uint32_t clientID, int& red, int& green, int& blue);
+
+	// Get default colors for predefined invisible items
+	static Color GetInvalidItemColor();
+	static Color GetInvisibleStairsColor();
+	static Color GetInvisibleWalkableColor();
+	static Color GetInvisibleWallColor();
+
+	// Check if custom colors are enabled
+	static bool IsCustomColorsEnabled();
+
+private:
+	static bool custom_colors_enabled;
+	static Color invalid_color;
+	static Color stairs_color;
+	static Color walkable_color;
+	static Color wall_color;
+	static std::unordered_map<uint32_t, Color> custom_colors;
+
+	// Parse custom IDs string from settings
+	static void ParseCustomIDs(const std::string& custom_ids_str);
 };
 
 class MapDrawer {

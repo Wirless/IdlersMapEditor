@@ -236,6 +236,7 @@ void Settings::IO(IOMode mode) {
 	section("Version");
 	Int(VERSION_ID, 0);
 	Int(CHECK_SIGNATURES, 0);
+	Int(FORCE_CLIENT_ITEMS_OTB, 0);
 	Int(USE_CUSTOM_DATA_DIRECTORY, 0);
 	String(DATA_DIRECTORY, "");
 	String(EXTENSIONS_DIRECTORY, "");
@@ -271,6 +272,7 @@ void Settings::IO(IOMode mode) {
 	Int(CUSTOM_BORDER_ID, 1);
 	Int(HOUSE_BRUSH_REMOVE_ITEMS, 0);
 	Int(AUTO_ASSIGN_DOORID, 1);
+	Int(AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE, 0);
 	Int(ERASER_LEAVE_UNIQUE, 1);
 	Int(DOODAD_BRUSH_ERASE_LIKE, 0);
 	Int(WARN_FOR_DUPLICATE_ID, 1);
@@ -287,6 +289,7 @@ void Settings::IO(IOMode mode) {
 	Int(SAVE_WITH_OTB_MAGIC_NUMBER, 0);
 	Int(REPLACE_SIZE, 500);
 	Int(COPY_POSITION_FORMAT, 0);
+	Int(REFRESH_RADIUS, 15);
 
 	section("Graphics");
 	Int(TEXTURE_MANAGEMENT, 1);
@@ -369,6 +372,7 @@ void Settings::IO(IOMode mode) {
 	Int(USE_UPDATER, 1);
 	String(RECENT_EDITED_MAP_PATH, "");
 	String(RECENT_EDITED_MAP_POSITION, "");
+	String(OTS_DATA_DIRECTORY, "");
 	Int(LAST_WEBSITES_OPEN_TIME, 0);
 
 	Int(FIND_ITEM_MODE, 0);
@@ -380,6 +384,7 @@ void Settings::IO(IOMode mode) {
 
 	Int(AUTO_SAVE_ENABLED, 0);
 	Int(AUTO_SAVE_INTERVAL, 5);
+	Int(SUPPRESS_MAP_WARNINGS, 1);
 
 	// Dark Mode
 	section("Interface");
@@ -388,6 +393,31 @@ void Settings::IO(IOMode mode) {
 	Int(DARK_MODE_RED, 45);
 	Int(DARK_MODE_GREEN, 45);
 	Int(DARK_MODE_BLUE, 48);
+
+	// Invisible Items Colors
+	section("InvisibleItems");
+	Int(INVISIBLE_ITEMS_ENABLE_CUSTOM, 0);
+	Int(INVISIBLE_INVALID_RED, 255);
+	Int(INVISIBLE_INVALID_GREEN, 0);
+	Int(INVISIBLE_INVALID_BLUE, 0);
+	Int(INVISIBLE_STAIRS_RED, 255);
+	Int(INVISIBLE_STAIRS_GREEN, 255);
+	Int(INVISIBLE_STAIRS_BLUE, 0);
+	Int(INVISIBLE_WALKABLE_RED, 255);
+	Int(INVISIBLE_WALKABLE_GREEN, 0);
+	Int(INVISIBLE_WALKABLE_BLUE, 0);
+	Int(INVISIBLE_WALL_RED, 0);
+	Int(INVISIBLE_WALL_GREEN, 255);
+	Int(INVISIBLE_WALL_BLUE, 255);
+	String(INVISIBLE_CUSTOM_IDS, "");
+
+	// Client Box Settings
+	section("ClientBox");
+	Int(INGAME_BOX_CUSTOM_SIZE_ENABLED, 0);
+	Int(INGAME_BOX_WIDTH, 17);
+	Int(INGAME_BOX_HEIGHT, 13);
+	Int(INGAME_BOX_OFFSET_X, 0);
+	Int(INGAME_BOX_OFFSET_Y, 2);
 
 	// House creation settings
 	section("HouseCreation");
@@ -412,6 +442,22 @@ void Settings::IO(IOMode mode) {
 	section("PaletteGrid");
 	Int(GRID_CHUNK_SIZE, 3000);
 	Int(GRID_VISIBLE_ROWS_MARGIN, 30);
+
+	// Tooltip settings
+	section("ToolTip");
+	Int(TOOLTIP_SHOW, 0);
+	Int(TOOLTIP_SHOW_HASSCRIPT, 0);
+	Int(TOOLTIP_SHOW_TEXT, 0);
+	Int(TOOLTIP_SHOW_ITEMID, 0);
+	Int(TOOLTIP_SHOW_AID, 0);
+	Int(TOOLTIP_SHOW_UID, 0);
+	Int(TOOLTIP_SHOW_DOORID, 0);
+	Int(TOOLTIP_SHOW_DESTINATION, 0);
+	Int(TOOLTIP_SHOW_HOUSEID, 0);
+	Int(HOUSE_CUSTOM_COLORS, 1);
+	String(TOOLTIP_IGNORE_IDS, "");
+
+
 
 #undef section
 #undef Int
