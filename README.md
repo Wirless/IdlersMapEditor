@@ -2,6 +2,20 @@ https://discord.com/invite/FD2cYKBq5E
 
 idlers tavern has all the information about updates"
 
+Version 7.1.2 with Live mapping fixed and other improvements!
+
+
+<img width="1391" height="716" alt="image" src="https://github.com/user-attachments/assets/f43e25df-5963-4968-8af8-395b8c80246e" />
+
+<img width="1761" height="989" alt="image" src="https://github.com/user-attachments/assets/1fb3d044-4d46-4b3a-b737-05dfc98c3cba" />
+
+
+<img width="425" height="1000" alt="image" src="https://github.com/user-attachments/assets/deaaddc6-f342-4aef-be26-2ed6d481ba54" />
+
+<img width="711" height="533" alt="image" src="https://github.com/user-attachments/assets/7f52efb3-728b-4c4f-b528-9440582cdbb4" />
+
+<img width="431" height="604" alt="image" src="https://github.com/user-attachments/assets/1cc82af9-d702-4b12-90b6-df5dd9d31d38" />
+
 
 continuation of : 
 https://github.com/Wirless/OTARMEIE-OLD
