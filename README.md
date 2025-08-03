@@ -1,5 +1,139 @@
 https://discord.com/invite/FD2cYKBq5E
+_________________________________________
 
+Version 7.1.2[4] Experimental
+
+Palette
+enable action ID -> place items with actionID for quests/liveable lua functions
+Selection to Dooadds-> live copy of places houses or other things floor supported pre-build
+House palette -> multiple house editing
+Creature palette -> purge / import / sprite view /zoom load npcs or monsters create monster or npc creature to place brush
+RAW -> others->grid view.
+
+
+
+
+Find Item Improvements
+-Next functionality To be implemented
+Find Creature
+-- find any creature on map
+Replace Item improvements
+Replace selection ability to move selection actively
+
+
+Find unique/action ID-range
+
+Borderize Batching - no more freezes
+Wallize - new functionality to Wallize 
+
+Remove by ID - with ranges
+
+Remove duplicates - With flags
+
+Remove unreachable tiles - Custom client viewport input
+
+Edit Towns - paste position any format
+Export to XML
+
+Cleanup Tool
+Remove invalid items - invalid items of any kind
+Remove monsters in blocking tiles - remove monsters from walls
+Remove empty spawns - se
+remove problematic items - whey if any invalid items are not removed in first row this should do trick 
+Range option
+ignored ids (within range)
+
+
+View - 
+use house colors extra colors for houses now
+
+Navigate - 
+Refresh visible area for live mapping
+
+Minimap - 
+*Caching
+*buttons
+*waypoints
+*save cache
+*load cache
+
+LOD- Level of detail optimizations
+-preferences tab 
+-with minimap opened
+
+Chat-
+Live chat with other mappers Experimental might have some flaws or others might be able to crash it untested
+
+Live mapping
+hosting copy paste works shift tag large area does not.
+no goto functionality
+no town position parsing.
+no optimizations
+no full synchronization
+
+GOTO Position - improvements
+paste any format
+
+Export minimap
+-- optimization export a minimap to a small bpm format 
+
+Detached View
+--multi monitor support
+
+Notes - add notes to map 
+*to add waypoint integration from minimap to notes.
+
+Recent brushes 
+Great addition to feature your last brushes with presets!
+
+Monster maker
+TFS 1.X support for generating monster .xmls in good format with a spell preview (very alpha)
+
+Reset house IDS
+reset town IDS 
+reset IDS of houses and towns remember to make account maker and databse adjustments
+
+Procedural map
+improvements
+
+
+Preferences
+
+Autosave
+Autoborder
+REVSCRIPT SUPPORT
+enable  raw on right click
+tileset editing + autoborder tool
+never show map loader warnirngs
+
+Editor auto assign depot to closest temple [hot]
+
+graphics client box customization
+
+dark mode /layoutmode
+
+client options
+loads items.otb spr dat items.xml from single folder!
+check file signatures disabled by default
+LOD TAB
+
+
+
+
+Item editor Experimental (coming soon)
+
+
+Automagic semi-working carpet layers
+
+Tooltip info - advanced tooltip info
+
+Invisible items - set special tiles to a color of your chosing
+
+
+
+
+
+______________________________________
 idlers tavern has all the information about updates"
 
 Version 7.1.2 with Live mapping fixed and other improvements!
