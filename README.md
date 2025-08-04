@@ -1,6 +1,9 @@
 https://discord.com/invite/FD2cYKBq5E
 _________________________________________
 
+
+https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/
+
 Version 7.1.2[4] Experimental
 
 Palette
