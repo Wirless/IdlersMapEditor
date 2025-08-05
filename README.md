@@ -1,5 +1,8 @@
-https://discord.com/invite/FD2cYKBq5E
+https://discord.com/invite/FD2cYKBq5E  <-- Version 7.2.0 available on discord
 _________________________________________
+
+https://www.youtube.com/watch?v=qYA83PqXjMU&ab_channel=Idler_pl
+
 
 
 https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/
