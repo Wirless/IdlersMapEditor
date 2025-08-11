@@ -632,29 +632,8 @@ void Tile::update() {
 }
 
 void Tile::borderize(BaseMap* parent) {
-	if (!ground) {
-		OutputDebugStringA("DEBUG DRAG: borderize called on tile with no ground, skipping\n");
-		return;
-	}
-	// Add debugging output for borderize operation
-	char debug_msg[512];
-	sprintf(debug_msg, "DEBUG DRAG: borderize called on tile at pos=(%d,%d,%d), SAME_GROUND_TYPE_BORDER=%d\n", 
-		getPosition().x, getPosition().y, getPosition().z, g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER));
-	OutputDebugStringA(debug_msg);
-	
-	if (g_settings.getBoolean(Config::SAME_GROUND_TYPE_BORDER)) {
-		// Use the custom reborderize method for better border placement
-		sprintf(debug_msg, "DEBUG DRAG: Calling GroundBrush::reborderizeTile for tile at pos=(%d,%d,%d)\n", 
-			getPosition().x, getPosition().y, getPosition().z);
-		OutputDebugStringA(debug_msg);
-		GroundBrush::reborderizeTile(parent, this);
-	} else {
-		// Standard border handling
-		sprintf(debug_msg, "DEBUG DRAG: Calling GroundBrush::doBorders for tile at pos=(%d,%d,%d)\n", 
-			getPosition().x, getPosition().y, getPosition().z);
-		OutputDebugStringA(debug_msg);
-		GroundBrush::doBorders(parent, this);
-	}
+	// Allow borderize to work on empty tiles too - they can receive borders from adjacent ground tiles
+	GroundBrush::doBorders(parent, this);
 }
 
 void Tile::addBorderItem(Item* item) {

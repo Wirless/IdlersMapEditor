@@ -45,7 +45,6 @@ public:
 	virtual void undraw(BaseMap* map, Tile* tile);
 	static void doBorders(BaseMap* map, Tile* tile);
 	static const BorderBlock* getBrushTo(GroundBrush* from, GroundBrush* to);
-	static void reborderizeTile(BaseMap* map, Tile* tile);
 
 	virtual int32_t getZ() const {
 		return z_order;

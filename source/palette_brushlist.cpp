@@ -75,16 +75,21 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	topsizer->Add(ts_sizer, 1, wxEXPAND);
 
 	if (g_settings.getBoolean(Config::SHOW_TILESET_EDITOR)) {
-		// Create a vertical sizer to hold the two rows of buttons
-		wxSizer* buttonSizer = newd wxBoxSizer(wxVERTICAL);
-		
-		// First row - Add Tileset and Add Item
-		wxSizer* firstRowSizer = newd wxBoxSizer(wxHORIZONTAL);
-		wxButton* buttonAddTileset = newd wxButton(this, wxID_NEW, "Add new Tileset");
-		firstRowSizer->Add(buttonAddTileset, wxSizerFlags(1).Expand());
-		
-		wxButton* buttonAddItemToTileset = newd wxButton(this, wxID_ADD, "Add new Item");
-		firstRowSizer->Add(buttonAddItemToTileset, wxSizerFlags(1).Expand());
+		try {
+			// Create a vertical sizer to hold the two rows of buttons
+			wxSizer* buttonSizer = newd wxBoxSizer(wxVERTICAL);
+			
+			// First row - Add Tileset and Add Item
+			wxSizer* firstRowSizer = newd wxBoxSizer(wxHORIZONTAL);
+			wxButton* buttonAddTileset = newd wxButton(this, wxID_NEW, "Add new Tileset");
+			if (buttonAddTileset) {
+				firstRowSizer->Add(buttonAddTileset, wxSizerFlags(1).Expand());
+			}
+			
+			wxButton* buttonAddItemToTileset = newd wxButton(this, wxID_ADD, "Add new Item");
+			if (buttonAddItemToTileset) {
+				firstRowSizer->Add(buttonAddItemToTileset, wxSizerFlags(1).Expand());
+			}
 		
 		// Add first row to the button sizer
 		buttonSizer->Add(firstRowSizer, wxSizerFlags(0).Expand());
@@ -110,7 +115,17 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 		buttonSizer->Add(secondRowSizer, wxSizerFlags(0).Expand());
 		
 		// Add the complete button sizer to the top sizer
-		topsizer->Add(buttonSizer, 0, wxEXPAND | wxALL, 5);
+		if (buttonSizer) {
+			topsizer->Add(buttonSizer, 0, wxEXPAND | wxALL, 5);
+		}
+		
+		} catch (const std::exception& e) {
+			// Handle errors gracefully to prevent crashes when enabling tileset editing
+			wxLogError("Error creating tileset editor UI: %s", e.what());
+		} catch (...) {
+			// Handle any other exceptions
+			wxLogError("Unknown error occurred while creating tileset editor UI");
+		}
 	}
 
 	for (TilesetContainer::const_iterator iter = tilesets.begin(); iter != tilesets.end(); ++iter) {

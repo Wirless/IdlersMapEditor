@@ -104,6 +104,7 @@ protected:
 	wxCheckBox* same_ground_type_chkbox;
 	wxCheckBox* walls_repel_borders_chkbox;
 	wxCheckBox* layer_carpets_chkbox;
+	wxCheckBox* force_roof_outer_borders_chkbox;
 	wxCheckBox* borderize_delete_chkbox;
 	wxCheckBox* borderize_paste_chkbox;
 	wxCheckBox* borderize_drag_chkbox;

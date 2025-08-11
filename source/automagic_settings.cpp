@@ -60,6 +60,12 @@ AutomagicSettingsDialog::AutomagicSettingsDialog(wxWindow* parent) :
     layer_carpets_checkbox->Enable(automagic_enabled_checkbox->GetValue());
     settings_sizer->Add(layer_carpets_checkbox, 0, wxALL, 5);
     
+    force_roof_outer_borders_checkbox = newd wxCheckBox(this, wxID_ANY, "Force Roof Outer Borders");
+    force_roof_outer_borders_checkbox->SetValue(g_settings.getBoolean(Config::FORCE_ROOF_OUTER_BORDERS));
+    force_roof_outer_borders_checkbox->SetToolTip("When enabled, autoborders will force place outer borders for roofs in empty spaces, solving issues where roofs don't get proper borders when working with their groundID");
+    force_roof_outer_borders_checkbox->Enable(automagic_enabled_checkbox->GetValue());
+    settings_sizer->Add(force_roof_outer_borders_checkbox, 0, wxALL, 5);
+    
     borderize_delete_checkbox = newd wxCheckBox(this, wxID_ANY, "Borderize on Delete");
     borderize_delete_checkbox->SetValue(g_settings.getBoolean(Config::BORDERIZE_DELETE));
     borderize_delete_checkbox->SetToolTip("When enabled, deleting items will trigger automatic bordering of surrounding tiles");
@@ -103,6 +109,10 @@ AutomagicSettingsDialog::AutomagicSettingsDialog(wxWindow* parent) :
         "When 'Layer Carpets' is enabled, the editor will:\n"
         "- Place new carpets on top of existing carpets\n"
         "- Allow creating multi-layered carpet designs\n\n"
+        "When 'Force Roof Outer Borders' is enabled, the editor will:\n"
+        "- Force place outer borders for roofs in empty spaces\n"
+        "- Solve issues where roofs don't get proper borders\n"
+        "- Ensure consistent roof border placement\n\n"
         "When 'Use Custom Border' is enabled, the editor will:\n"
         "- Override automatic border selection with the specified border ID\n"
         "- Apply the same border pattern around any tile you draw\n"
@@ -148,6 +158,10 @@ bool AutomagicSettingsDialog::IsLayerCarpetsEnabled() const {
     return layer_carpets_checkbox->GetValue();
 }
 
+bool AutomagicSettingsDialog::IsForceRoofOuterBordersEnabled() const {
+    return force_roof_outer_borders_checkbox->GetValue();
+}
+
 bool AutomagicSettingsDialog::IsBorderizeDeleteEnabled() const {
     return borderize_delete_checkbox->GetValue();
 }
@@ -167,7 +181,10 @@ void AutomagicSettingsDialog::OnClickOK(wxCommandEvent& event) {
     g_settings.setInteger(Config::SAME_GROUND_TYPE_BORDER, IsSameGroundTypeBorderEnabled() ? 1 : 0);
     g_settings.setInteger(Config::WALLS_REPEL_BORDERS, IsWallsRepelBordersEnabled() ? 1 : 0);
     g_settings.setInteger(Config::LAYER_CARPETS, IsLayerCarpetsEnabled() ? 1 : 0);
+    g_settings.setInteger(Config::FORCE_ROOF_OUTER_BORDERS, IsForceRoofOuterBordersEnabled() ? 1 : 0);
     g_settings.setInteger(Config::BORDERIZE_DELETE, IsBorderizeDeleteEnabled() ? 1 : 0);
+
+	
     
     // Save custom border settings
     g_settings.setInteger(Config::CUSTOM_BORDER_ENABLED, IsCustomBorderEnabled() ? 1 : 0);
@@ -200,6 +217,7 @@ void AutomagicSettingsDialog::OnAutomagicCheck(wxCommandEvent& event) {
         same_ground_type_checkbox->Enable(automagic_enabled);
         walls_repel_borders_checkbox->Enable(automagic_enabled);
         layer_carpets_checkbox->Enable(automagic_enabled);
+        force_roof_outer_borders_checkbox->Enable(automagic_enabled);
         borderize_delete_checkbox->Enable(automagic_enabled);
         custom_border_checkbox->Enable(automagic_enabled);
     }

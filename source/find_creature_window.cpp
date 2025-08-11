@@ -167,6 +167,10 @@ void FindCreatureDialog::RefreshContentsInternal() {
 
 void FindCreatureDialog::OnClickOK(wxCommandEvent& event) {
     int selection = creatures_list->GetSelection();
+
+	int creature_found_count; //
+	std::string creature_name; // 
+
     if (selection != wxNOT_FOUND) {
         CreatureType* creature_type = reinterpret_cast<CreatureType*>(creatures_list->GetClientData(selection));
         if (creature_type) {
@@ -186,74 +190,68 @@ void FindCreatureDialog::OnClickOK(wxCommandEvent& event) {
                 g_gui.CreateLoadBar("Searching for creatures...");
                 
                 const std::string creature_name = creature_type->name;
-                uint64_t tile_count = 0;
-                for (int z = 0; z < 16; ++z) {
-                    for (int x = 0; x < map.getWidth(); ++x) {
-                        for (int y = 0; y < map.getHeight(); ++y) {
-                            ++tile_count;
-                            if (tile_count % 5000 == 0) {
-                                g_gui.SetLoadDone(int(tile_count * 100.0 / map.getTileCount()));
-                            }
+                size_t spawn_count = 0;
+                size_t total_spawns = 0;
+                
+                // Count total spawns for progress reporting
+                for (auto spawn_iter = map.spawns.begin(); spawn_iter != map.spawns.end(); ++spawn_iter) {
+                    ++total_spawns;
+                }
+                
+                // Much more efficient: iterate through spawns directly instead of all map tiles
+                for (auto spawn_iter = map.spawns.begin(); spawn_iter != map.spawns.end(); ++spawn_iter) {
+                    ++spawn_count;
+                    if (spawn_count % 10 == 0) {
+                        g_gui.SetLoadDone(int(spawn_count * 100.0 / total_spawns));
+                        
+                        // Allow UI updates to prevent freezing
+                        wxSafeYield();
+                    }
+                    
+                    const Position& spawn_pos = *spawn_iter;
+                    Tile* spawn_tile = map.getTile(spawn_pos);
+                    if (!spawn_tile || !spawn_tile->spawn) continue;
+                    
+                    int spawn_radius = spawn_tile->spawn->getSize();
+                    bool found_matching_creature = false;
+                    
+                    // Check all tiles within spawn radius for creatures
+                    for (int sx = -spawn_radius; sx <= spawn_radius && !found_matching_creature; ++sx) {
+                        for (int sy = -spawn_radius; sy <= spawn_radius && !found_matching_creature; ++sy) {
+                            // Skip if outside circular spawn radius
+                            if (sx * sx + sy * sy > spawn_radius * spawn_radius) continue;
                             
-                            Tile* tile = map.getTile(x, y, z);
-                            if (!tile) continue;
+                            Tile* creature_tile = map.getTile(spawn_pos.x + sx, spawn_pos.y + sy, spawn_pos.z);
+                            if (!creature_tile || !creature_tile->creature) continue;
                             
-                            // Check for spawns
-                            if (tile->spawn) {
-                                // Found a spawn, now check for creatures nearby with matching name
-                                bool found_matching_creature = false;
-                                Position spawn_pos = tile->getPosition();
-                                int spawn_radius = tile->spawn->getSize();
-                                
-                                // Check if any creatures of this type exist within spawn radius
-                                for (int sx = -spawn_radius; sx <= spawn_radius && !found_matching_creature; ++sx) {
-                                    for (int sy = -spawn_radius; sy <= spawn_radius && !found_matching_creature; ++sy) {
-                                        Tile* creature_tile = map.getTile(spawn_pos.x + sx, spawn_pos.y + sy, spawn_pos.z);
-                                        if (!creature_tile || !creature_tile->creature) continue;
-                                        
-                                        // Check if this creature matches our search
-                                        if (creature_tile->creature && creature_tile->creature->getName() == creature_name) {
-                                            found_matching_creature = true;
-                                            wxString description = wxString::Format("%s at (%d,%d,%d)", 
-                                                wxString(creature_name.c_str(), wxConvUTF8), 
-                                                creature_tile->getPosition().x, 
-                                                creature_tile->getPosition().y, 
-                                                creature_tile->getPosition().z);
-                                            result_window->AddPosition(description, creature_tile->getPosition());
-                                            ++creature_found_count;
-                                        }
-                                    }
-                                }
-                                
-                                // If no creature of this type found, still show the spawn position
-                                if (!found_matching_creature) {
-                                    wxString description = wxString::Format("Spawn for %s at (%d,%d,%d)", 
-                                        wxString(creature_name.c_str(), wxConvUTF8), 
-                                        spawn_pos.x, spawn_pos.y, spawn_pos.z);
-                                    result_window->AddPosition(description, spawn_pos);
-                                    ++creature_found_count;
-                                }
-                            }
-                            
-                            // Check for loose creatures (not in spawns)
-                            if (tile->creature) {
-                                // Check if this loose creature matches our search
-                                if (tile->creature->getName() == creature_name) {
-                                    wxString description = wxString::Format("%s (loose) at (%d,%d,%d)", 
-                                        wxString(creature_name.c_str(), wxConvUTF8), 
-                                        tile->getPosition().x, 
-                                        tile->getPosition().y, 
-                                        tile->getPosition().z);
-                                    result_window->AddPosition(description, tile->getPosition());
-                                    ++creature_found_count;
-                                }
+                            // Check if this creature matches our search
+                            if (creature_tile->creature->getName() == creature_name) {
+                                found_matching_creature = true;
+                                wxString description = wxString::Format("%s at (%d,%d,%d)", 
+                                    wxString(creature_name.c_str(), wxConvUTF8), 
+                                    creature_tile->getPosition().x, 
+                                    creature_tile->getPosition().y, 
+                                    creature_tile->getPosition().z);
+                                result_window->AddPosition(description, creature_tile->getPosition());
+                                ++creature_found_count;
                             }
                         }
+                    }
+                    
+                    // If no creature of this type found, still show the spawn position
+                    if (!found_matching_creature) {
+                        wxString description = wxString::Format("Spawn for %s at (%d,%d,%d)", 
+                            wxString(creature_name.c_str(), wxConvUTF8), 
+                            spawn_pos.x, spawn_pos.y, spawn_pos.z);
+                        result_window->AddPosition(description, spawn_pos);
+                        ++creature_found_count;
                     }
                 }
                 
                 g_gui.DestroyLoadBar();
-                
+
+				
+
                 wxString result_message;
                 if (creature_found_count == 0) {
                     result_message = wxString::Format("No %s found on the map.", wxString(creature_name.c_str(), wxConvUTF8));

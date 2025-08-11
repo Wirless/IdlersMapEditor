@@ -49,19 +49,39 @@ uint32_t FindClosestTemple(BaseMap* map, const Position& depotPos) {
 		const Position& templePos = town->getTemplePosition();
 		if (!templePos.isValid()) continue;
 		
-		// Calculate distance (using Euclidean distance)
-		double dx = static_cast<double>(depotPos.x - templePos.x);
-		double dy = static_cast<double>(depotPos.y - templePos.y);
-		double dz = static_cast<double>(depotPos.z - templePos.z);
-		double distance = sqrt(dx * dx + dy * dy + dz * dz);
+		// Optimize distance calculation for large maps
+		int64_t dx = static_cast<int64_t>(depotPos.x) - static_cast<int64_t>(templePos.x);
+		int64_t dy = static_cast<int64_t>(depotPos.y) - static_cast<int64_t>(templePos.y);
+		int64_t dz = static_cast<int64_t>(depotPos.z) - static_cast<int64_t>(templePos.z);
 		
-		if (distance < minDistance) {
-			minDistance = distance;
+		// Use squared distance to avoid expensive sqrt operation
+		double distanceSquared = static_cast<double>(dx * dx + dy * dy + dz * dz);
+		
+		if (distanceSquared < minDistance) {
+			minDistance = distanceSquared;
 			closestTownId = town->getID();
 		}
 	}
 	
 	return closestTownId;
+}
+
+// Universal helper function to apply depot assignment for any newly created item
+void ApplyDepotAssignment(Item* item, BaseMap* map, const Position& position) {
+	if (!item || !map || !g_settings.getBoolean(Config::AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE)) {
+		return;
+	}
+	
+	const ItemType& itemType = g_items[item->getID()];
+	if (itemType.isDepot()) {
+		Depot* depot = dynamic_cast<Depot*>(item);
+		if (depot) {
+			uint32_t closestTownId = FindClosestTemple(map, position);
+			if (closestTownId > 0) {
+				depot->setDepotID(static_cast<uint8_t>(closestTownId));
+			}
+		}
+	}
 }
 
 //=============================================================================
@@ -146,16 +166,7 @@ void RAWBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 		}
 		
 		// Auto-assign depot to closest temple if enabled and this is a depot item
-		if (g_settings.getBoolean(Config::AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE) && 
-			itemtype->isDepot()) {
-			Depot* depot = dynamic_cast<Depot*>(new_item);
-			if (depot) {
-				uint32_t closestTownId = FindClosestTemple(map, tile->getPosition());
-				if (closestTownId > 0) {
-					depot->setDepotID(static_cast<uint8_t>(closestTownId));
-				}
-			}
-		}
+		ApplyDepotAssignment(new_item, map, tile->getPosition());
 		
 		tile->addItem(new_item);
 	}

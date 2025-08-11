@@ -7,6 +7,7 @@
 #include <pugixml.hpp>
 #include <regex>
 #include <fstream>
+#include <algorithm>
 
 NPCManager::NPCManager() : loaded(false) {
 }
@@ -199,10 +200,21 @@ void NPCManager::parseParameters(pugi::xml_node npc_node, NPCEntry& entry) const
 }
 
 NPCEntry* NPCManager::findByName(const std::string& name) const {
+    // First try exact match
     auto it = npc_entries.find(name);
     if (it != npc_entries.end()) {
         return const_cast<NPCEntry*>(&it->second);
     }
+    
+    // If exact match fails, try case-insensitive and special character normalization
+    std::string normalized_search_name = normalizeName(name);
+    
+    for (const auto& entry : npc_entries) {
+        if (normalizeName(entry.first) == normalized_search_name) {
+            return const_cast<NPCEntry*>(&entry.second);
+        }
+    }
+    
     return nullptr;
 }
 
@@ -320,4 +332,49 @@ std::string NPCManager::getScanStatistics() const {
     result += "NPCs with scripts: " + std::to_string(with_scripts);
     
     return result;
+}
+
+std::string NPCManager::normalizeName(const std::string& name) const {
+    std::string normalized = name;
+    
+    // Convert to lowercase for case-insensitive matching
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), ::tolower);
+    
+    // Replace various quote/apostrophe characters with a standard apostrophe
+    // This handles issues where different encodings might use different apostrophe characters
+    std::string::size_type pos = 0;
+    while ((pos = normalized.find('\x91', pos)) != std::string::npos) {  // Left single quotation mark
+        normalized.replace(pos, 1, "'");
+        pos++;
+    }
+    pos = 0;
+    while ((pos = normalized.find('\x92', pos)) != std::string::npos) {  // Right single quotation mark
+        normalized.replace(pos, 1, "'");
+        pos++;
+    }
+    pos = 0;
+    while ((pos = normalized.find('\x60', pos)) != std::string::npos) {  // Grave accent (backtick)
+        normalized.replace(pos, 1, "'");
+        pos++;
+    }
+    pos = 0;
+    while ((pos = normalized.find('\xc3\xa9', pos)) != std::string::npos) {  // UTF-8 é
+        normalized.replace(pos, 2, "e");
+        pos++;
+    }
+    pos = 0;
+    while ((pos = normalized.find('\xc3\xa8', pos)) != std::string::npos) {  // UTF-8 è
+        normalized.replace(pos, 2, "e");
+        pos++;
+    }
+    
+    // Remove extra whitespace
+    std::string::size_type start = normalized.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+        return "";
+    }
+    std::string::size_type end = normalized.find_last_not_of(" \t\r\n");
+    normalized = normalized.substr(start, end - start + 1);
+    
+    return normalized;
 } 

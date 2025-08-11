@@ -23,6 +23,8 @@
 #include "creatures.h"
 #include "creature_brush.h"
 
+#include <wx/dir.h>
+
 CreatureDatabase g_creatures;
 
 CreatureType::CreatureType() :
@@ -333,10 +335,38 @@ bool CreatureDatabase::importXMLFromOT(const FileName& filename, wxString& error
 			}
 
 			FileName monsterFile(filename);
-			monsterFile.SetFullName(wxString(attribute.as_string(), wxConvUTF8));
+			wxString originalFilename = wxString(attribute.as_string(), wxConvUTF8);
+			monsterFile.SetFullName(originalFilename);
 
 			pugi::xml_document monsterDoc;
 			pugi::xml_parse_result monsterResult = monsterDoc.load_file(monsterFile.GetFullPath().mb_str());
+			
+			// If the file doesn't exist with exact case, try case-insensitive search
+			if (!monsterResult && !monsterFile.FileExists()) {
+				// Try to find the file with different case
+				wxString dir = monsterFile.GetPath();
+				wxString name = monsterFile.GetName();
+				wxString ext = monsterFile.GetExt();
+				
+				wxDir directory(dir);
+				if (directory.IsOpened()) {
+					wxString foundFile;
+					bool found = directory.GetFirst(&foundFile, "*", wxDIR_FILES);
+					while (found) {
+						wxFileName candidate(dir, foundFile);
+						// Compare case-insensitive
+						if (candidate.GetName().Lower() == name.Lower() && 
+						    candidate.GetExt().Lower() == ext.Lower()) {
+							// Found a case-insensitive match
+							monsterFile.SetFullName(foundFile);
+							monsterResult = monsterDoc.load_file(monsterFile.GetFullPath().mb_str());
+							break;
+						}
+						found = directory.GetNext(&foundFile);
+					}
+				}
+			}
+			
 			if (!monsterResult) {
 				continue;
 			}

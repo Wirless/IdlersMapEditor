@@ -19,6 +19,7 @@ public:
     bool IsSameGroundTypeBorderEnabled() const;
     bool IsWallsRepelBordersEnabled() const;
     bool IsLayerCarpetsEnabled() const;
+    bool IsForceRoofOuterBordersEnabled() const;
     bool IsBorderizeDeleteEnabled() const;
     // New custom border methods
     bool IsCustomBorderEnabled() const;
@@ -38,6 +39,7 @@ protected:
     wxCheckBox* same_ground_type_checkbox;
     wxCheckBox* walls_repel_borders_checkbox;
     wxCheckBox* layer_carpets_checkbox;
+    wxCheckBox* force_roof_outer_borders_checkbox;
     wxCheckBox* borderize_delete_checkbox;
     // New UI elements for custom border
     wxCheckBox* custom_border_checkbox;

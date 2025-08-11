@@ -21,6 +21,7 @@
 
 #include "basemap.h"
 #include "items.h"
+#include "raw_brush.h"
 
 //=============================================================================
 // Carpet brush
@@ -148,11 +149,36 @@ bool CarpetBrush::canDraw(BaseMap* map, const Position& position) const {
 }
 
 void CarpetBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
-	// Only remove old carpets if layering is disabled
-	if (!g_settings.getBoolean(Config::LAYER_CARPETS)) {
+	if (g_settings.getBoolean(Config::LAYER_CARPETS)) {
+		// When layering is enabled, check for duplicates to prevent sandwich stacking
+		uint16_t carpetId = getRandomCarpet(CARPET_CENTER);
+		
+		// Check if this exact carpet already exists on the tile
+		for (Item* existing : tile->items) {
+			if (existing->isCarpet() && existing->getID() == carpetId) {
+				// Don't add duplicate carpet layers - maintain sandwich principle (one ingredient per layer)
+				return;
+			}
+		}
+		
+		// Add the new carpet layer
+		Item* new_item = Item::Create(carpetId);
+		if (new_item) {
+			// Apply depot assignment if applicable
+			ApplyDepotAssignment(new_item, map, tile->getPosition());
+			tile->addItem(new_item);
+		}
+	} else {
+		// Remove old carpets when layering is disabled
 		undraw(map, tile);
+		
+		Item* new_item = Item::Create(getRandomCarpet(CARPET_CENTER));
+		if (new_item) {
+			// Apply depot assignment if applicable
+			ApplyDepotAssignment(new_item, map, tile->getPosition());
+			tile->addItem(new_item);
+		}
 	}
-	tile->addItem(Item::Create(getRandomCarpet(CARPET_CENTER)));
 }
 
 void CarpetBrush::undraw(BaseMap* map, Tile* tile) {

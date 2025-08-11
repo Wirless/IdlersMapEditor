@@ -99,6 +99,7 @@ private:
     bool parseNPCXML(const std::string& npc_xml_path, NPCEntry& entry) const;
     void parseParameters(pugi::xml_node npc_node, NPCEntry& entry) const;
     void generateParametersXML(pugi::xml_node npc_node, const NPCEntry& entry) const;
+    std::string normalizeName(const std::string& name) const;
 };
 
 #endif // RME_NPC_MANAGER_H_ 

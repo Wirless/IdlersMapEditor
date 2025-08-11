@@ -112,6 +112,13 @@ Action::Action(Editor& editor, ActionIdentifier ident) :
 	type(ident) {
 }
 
+Action::~Action() {
+	ChangeList::const_reverse_iterator it = changes.rbegin();
+	while (it != changes.rend()) {
+		delete *it;
+		++it;
+	}
+}
 
 size_t Action::approx_memsize() const {
 	uint32_t mem = sizeof(*this);

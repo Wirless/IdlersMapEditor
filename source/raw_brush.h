@@ -55,4 +55,8 @@ protected:
 	ItemType* itemtype;
 };
 
+// Helper functions for depot assignment across all brushes
+uint32_t FindClosestTemple(BaseMap* map, const Position& depotPos);
+void ApplyDepotAssignment(Item* item, BaseMap* map, const Position& position);
+
 #endif

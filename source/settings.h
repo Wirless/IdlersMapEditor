@@ -135,6 +135,8 @@ namespace Config {
 		RAW_LIKE_SIMONE,
 		WORKER_THREADS,
 		COPY_POSITION_FORMAT,
+		FORCE_ROOF_OUTER_BORDERS,
+		AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE,
 
 		GOTO_WEBSITE_ON_BOOT,
 		INDIRECTORY_INSTALLATION,
@@ -268,9 +270,7 @@ namespace Config {
 		INGAME_BOX_OFFSET_X,              // int: custom X border offset (default 0)
 		INGAME_BOX_OFFSET_Y,              // int: custom Y border offset (default 2)
 
-		// Depot auto-assignment settings
-		AUTO_ASSIGN_DEPOT_TO_CLOSEST_TEMPLE,  // bool: auto-assign depot town ID to closest temple
-
+		
 		LAST,
 	};
 

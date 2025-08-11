@@ -898,6 +898,11 @@ wxNotebookPage* PreferencesWindow::CreateAutomagicPage() {
 	layer_carpets_chkbox->SetToolTip("When enabled, carpet brushes will be placed on top of existing carpets instead of replacing them");
 	settings_sizer->Add(layer_carpets_chkbox, 0, wxALL, 5);
 	
+	force_roof_outer_borders_chkbox = newd wxCheckBox(automagic_page, wxID_ANY, "Force Roof Outer Borders");
+	force_roof_outer_borders_chkbox->SetValue(g_settings.getBoolean(Config::FORCE_ROOF_OUTER_BORDERS));
+	force_roof_outer_borders_chkbox->SetToolTip("When enabled, autoborders will force place outer borders for roofs in empty spaces, solving issues where roofs don't get proper borders when working with their groundID");
+	settings_sizer->Add(force_roof_outer_borders_chkbox, 0, wxALL, 5);
+	
 	borderize_delete_chkbox = newd wxCheckBox(automagic_page, wxID_ANY, "Borderize on Delete");
 	borderize_delete_chkbox->SetValue(g_settings.getBoolean(Config::BORDERIZE_DELETE));
 	borderize_delete_chkbox->SetToolTip("When enabled, deleting items will trigger automatic bordering of surrounding tiles");
@@ -966,6 +971,7 @@ wxNotebookPage* PreferencesWindow::CreateAutomagicPage() {
 		same_ground_type_chkbox->Enable(enabled);
 		walls_repel_borders_chkbox->Enable(enabled);
 		layer_carpets_chkbox->Enable(enabled);
+		force_roof_outer_borders_chkbox->Enable(enabled);
 		borderize_delete_chkbox->Enable(enabled);
 		borderize_paste_chkbox->Enable(enabled);
 		borderize_drag_chkbox->Enable(enabled);
@@ -994,6 +1000,7 @@ wxNotebookPage* PreferencesWindow::CreateAutomagicPage() {
 	same_ground_type_chkbox->Enable(enabled);
 	walls_repel_borders_chkbox->Enable(enabled);
 	layer_carpets_chkbox->Enable(enabled);
+	force_roof_outer_borders_chkbox->Enable(enabled);
 	borderize_delete_chkbox->Enable(enabled);
 	borderize_paste_chkbox->Enable(enabled);
 	borderize_drag_chkbox->Enable(enabled);
@@ -1340,6 +1347,7 @@ void PreferencesWindow::Apply() {
 	g_settings.setInteger(Config::SAME_GROUND_TYPE_BORDER, same_ground_type_chkbox->GetValue());
 	g_settings.setInteger(Config::WALLS_REPEL_BORDERS, walls_repel_borders_chkbox->GetValue());
 	g_settings.setInteger(Config::LAYER_CARPETS, layer_carpets_chkbox->GetValue());
+	g_settings.setInteger(Config::FORCE_ROOF_OUTER_BORDERS, force_roof_outer_borders_chkbox->GetValue());
 	g_settings.setInteger(Config::BORDERIZE_DELETE, borderize_delete_chkbox->GetValue());
 	g_settings.setInteger(Config::BORDERIZE_PASTE, borderize_paste_chkbox->GetValue());
 	g_settings.setInteger(Config::BORDERIZE_PASTE_THRESHOLD, borderize_paste_threshold_spin->GetValue());

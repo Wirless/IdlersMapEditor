@@ -22,6 +22,7 @@
 
 #include "items.h"
 #include "basemap.h"
+#include "raw_brush.h"
 
 uint32_t TableBrush::table_types[256];
 
@@ -152,10 +153,15 @@ void TableBrush::draw(BaseMap* map, Tile* tile, void* parameter) {
 
 	if (type != 0) {
 		Item* new_item = Item::Create(type);
-		if (new_item && g_gui.IsCurrentActionIDEnabled()) {
-			new_item->setActionID(g_gui.GetCurrentActionID());
+		if (new_item) {
+			// Apply depot assignment if applicable
+			ApplyDepotAssignment(new_item, map, tile->getPosition());
+			
+			if (g_gui.IsCurrentActionIDEnabled()) {
+				new_item->setActionID(g_gui.GetCurrentActionID());
+			}
+			tile->addItem(new_item);
 		}
-		tile->addItem(new_item);
 	}
 }
 

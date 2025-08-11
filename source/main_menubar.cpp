@@ -87,6 +87,7 @@
 #include "chat_window.h"
 #include "creature_brush.h"
 #include "brush.h"
+#include "raw_brush.h"
 #include "tileset.h"
 
 const wxEventType EVT_MENU = wxEVT_COMMAND_MENU_SELECTED;
@@ -3726,6 +3727,9 @@ void MainMenuBar::OnRefreshItems(wxCommandEvent& WXUNUSED(event)) {
             Item* newItem = Item::Create(data.id);
             if(!newItem) continue;
 
+            // Apply depot assignment if applicable
+            ApplyDepotAssignment(newItem, &editor->map, data.pos);
+
             newItem->setActionID(data.actionId);
             newItem->setUniqueID(data.uniqueId);
             newItem->setText(data.text);
@@ -4354,6 +4358,9 @@ void MainMenuBar::OnDoodadsFillingTool(wxCommandEvent& WXUNUSED(event)) {
                 if (tile) {
                     Item* newItem = Item::Create(selectedItemId);
                     if (newItem) {
+                        // Apply depot assignment if applicable
+                        ApplyDepotAssignment(newItem, &map, pos);
+                        
                         // Create a copy of the tile for modification
                         Tile* newTile = tile->deepCopy(map);
                         newTile->addItem(newItem);
